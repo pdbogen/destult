@@ -1,0 +1,7 @@
+--- #YAML:1.0
+SERVERS: irc://irc.tamu.edu/#dc
+NICKNAME: Destult
+PASSWORD: Ic43
+TWITTER_C_K: Twitter Client Key
+TWITTER_C_S: Twitter Client Secret
+DICT_SERVER: dict.org

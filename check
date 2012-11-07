@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+for i in *.pl
+do
+	perl -c $i
+done

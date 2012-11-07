@@ -1,0 +1,3 @@
+./destult2.pl
+sleep 5s
+exec ./loop

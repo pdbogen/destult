@@ -1,0 +1,2233 @@
+--- #YAML:1.0
+DIE: |-
+  sub {
+    exit;
+  }
+
+TRAP: |-
+  sub {
+    my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
+    my $str = "";
+    for my $s (@{$heap->{ "servers" }}) {
+      if( $s->{ "ssid" } == $src ) {
+        if( $s->{ "trapEnabled" } ) {
+          $s->{ "trapEnabled" } = 0;
+          $kernel->post( $src, $replypath, "URL trapping now DISABLED. D:", $dest );
+        } else {
+          $s->{ "trapEnabled" } = 1;
+          $kernel->post( $src, $replypath, "URL trapping now enabled. :)", $dest );
+        }
+      }
+    }
+    return;
+  }
+
+LINK: |-
+  sub {
+    my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
+    my( $whom, $target ) = split( / /, $what, 2 );
+  
+    unless( exists( $heap->{ 'useraccess' }->{ uc( $target ) } ) ) {
+      $kernel->post( $src, $replypath, "'$target' has no access; link not allowed.", $dest );
+      return;
+    }
+  
+    if( access2( $heap->{ 'useraccess' }, $target, {} ) > accessLevel( $kernel, $heap, $who, $src ) ) {
+      $kernel->post( $src, $replypath, "You may not grant access exceeding your own.", $dest );
+      return;
+    }
+    if( exists( $heap->{ 'users' }->{ uc( $whom ) } ) ) {
+    	$heap->{ 'useraccess' }->{ uc( $whom ) } = "~".$target;
+        DumpFile( "useraccess.yaml", $heap->{ 'useraccess' } );
+        $kernel->post( $src, $replypath, "Set.", $dest );
+    } else {
+    	$kernel->post( $src, $replypath, "'$whom' not registered.", $dest );
+    }
+  }
+
+ACCESS: |-
+  sub {
+    my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
+    my( $whom, $level ) = split( / /, $what, 2 );
+    unless( $level =~ /^[0-9]$/ ) {
+    	$kernel->post( $src, $replypath, "Access level should be a non-negative integer. (Did you want LINK?)", $dest );
+    	return;
+    }
+    if( $level > access2( $heap->{ 'useraccess' }, $who, {} ) ) {
+    	$kernel->post( $src, $replypath, "You may not grant access exceeding your own.", $dest );
+    	return;
+    }
+    if( exists( $heap->{ 'users' }->{ uc( $whom ) } ) ) {
+    	$heap->{ 'useraccess' }->{ uc( $whom ) } = $level;
+        DumpFile( "useraccess.yaml", $heap->{ 'useraccess' } );
+        $kernel->post( $src, $replypath, "Set.", $dest );
+    } else {
+    	$kernel->post( $src, $replypath, "'$whom' not registered.", $dest );
+    }
+  }
+
+CLASSIFY: |-
+  sub {
+    my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
+    my( $cmd, $level ) = split( / /, $what, 2 );
+    unless( !($level) || $level =~ /^[0-9]$/ ) {
+    	$kernel->post( $src, $replypath, "Access level should be a non-negative integer.", $dest );
+    	return;
+    }
+    if( defined $level ) {
+      if( exists( $heap->{ 'commands' }->{ uc( $cmd ) } ) ) {
+        $heap->{ 'cmdaccess' }->{ uc( $cmd ) } = $level;
+        DumpFile( "cmdaccess.yaml", $heap->{ 'cmdaccess' } );
+        $kernel->post( $src, $replypath, "Set.", $dest );
+      } elsif( exists( $heap->{ 'db' }->{ uc( $cmd ) } ) ) {
+        $heap->{ 'factoidAccess' } = {} unless exists $heap->{ 'factoidAccess' };
+        $heap->{ 'factoidAccess' }->{ uc( $cmd ) } = $level;
+        DumpFile( 'factoidAccess.yaml', $heap->{ 'factoidAccess' } );
+        $kernel->post( $src, $replypath, "Set.", $dest );
+      } else {
+        $kernel->post( $src, $replypath, "'$cmd' not found.", $dest );
+      }
+    } else {
+      if( exists( $heap->{ 'cmdaccess' }->{ uc( $cmd ) } ) ) {
+        $kernel->post( $src, $replypath, uc( $cmd )." is level ".$heap->{ 'cmdaccess' }->{ uc( $cmd ) }, $dest );
+      } else {
+        $kernel->post( $src, $replypath, uc( $cmd )." is not classified.", $dest );
+      }
+    }
+  }
+
+DECLASSIFY: |-
+  sub {
+    my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
+    my %lists = (
+      'cmdaccess' => 'command',
+      'factoidAccess' => 'factoid',
+    );
+    my $found = 0;
+    for my $list (keys %lists) {
+      if( exists( $heap->{ $list } ) && exists( $heap->{ $list }->{ uc( $what ) } ) ) {
+        delete( $heap->{ $list }->{ uc( $what ) } );
+        DumpFile( $list.'.yaml', $heap->{ $list } );
+        $kernel->post( $src, $replypath, "'$what' removed from ".$lists{ $list }." access list.", $dest );
+        $found = 1;
+      }
+    }
+    if( !$found ) {
+      $kernel->post( $src, $replypath, "'$what' not found in any access lists.", $dest );
+    }
+  }
+ACCESSLIST: |-
+  sub {
+    my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
+    $kernel->post( $src, $replypath, "Commands:", $dest );
+    foreach( keys( %{ $heap->{ 'cmdaccess' } } ) ) {
+      $kernel->post( $src, $replypath, "    $_: ".$heap->{ 'cmdaccess' }->{ $_ }, $dest );
+    }
+    $kernel->post( $src, $replypath, "Users:", $dest );
+    foreach( keys( %{ $heap->{ 'useraccess' } } ) ) {
+      $kernel->post( $src, $replypath, "    $_: ".$heap->{ 'useraccess' }->{ $_ }, $dest );
+    }
+  }
+
+LISTCOMMANDS: |-
+  sub {
+    my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
+    my $reply = "I have the following commands: ";
+    foreach( keys( %{ $heap->{ 'commands' } } ) ) {
+      $reply .= $_;
+      if( exists( $heap->{ 'cmdaccess' }->{ uc( $_ ) } ) ) {
+        $reply .= "(".$heap->{ 'cmdaccess' }->{ uc( $_ ) }.")";
+      }
+      $reply .= " ";
+    }
+    $kernel->post( $src, $replypath, $reply, $dest );
+  }
+
+SCTITLE: |-
+  sub {
+    my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
+    if( !exists $Destult::config{ 'SC_SERVER' } ) {
+    	$kernel->post( $src, $replypath, "No shoutcast server configured.", $dest );
+    	return 0;
+    }
+    $Destult::config{ 'SC_PORT' } = 8000 unless exists $Destult::config{ 'SC_PORT' };
+
+    use Netx::WebRadio::Station::Shoutcast;
+    
+    my $station = Netx::WebRadio::Station::Shoutcast->new();
+    if( $station->connect(
+          $Destult::config{ 'SC_SERVER' },
+          $Destult::config{ 'SC_PORT' }
+        )
+      ) {
+      $station->title( " " );
+      my $i = 0;
+      while( $station->title() eq " " ) {
+        if( $i++ > 10000 ) {
+          $kernel->post( $src, $replypath, "Couldn't get title. Try again?", $dest );
+          return;
+        }
+        if( !$station->receive() ) {
+          $kernel->post( $src, $replypath, "Problem getting data from server.", $dest );
+          return;
+        }
+      }
+      $kernel->post( $src, $replypath, $station->title(), $dest );
+    } else {
+  #    my $http = new HTTP::Lite;
+  #    my $req = $http->request(
+  #      "http://".$Destult::config{ 'SC_SERVER' }.
+  #      ":".$Destult::config{ 'SC_PORT' }."/index.html"
+  #    ) or {
+  #      $kernel->post( $src, $replypath, "Direct connect to stream failed and HTML grab failed.", $dest );
+  #      return 0;
+  #    }
+      $kernel->post( $src, $replypath, "Direct connect to stream failed.", $dest );
+    }
+  }
+
+RELOADCOMMANDS: |-
+  sub {
+    my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
+    if( -e "commands.yaml" ) {
+      my %source = %{ LoadFile( "commands.yaml" ) };
+      for my $key ( keys %source ) {
+        print( "CORE: Parsing $key..." );
+        $heap->{ 'commands' }->{ $key } = eval( $source{ $key } );
+        if( $@ ) {
+          print( "FAILED: $@\n\n" );
+          delete $heap->{ 'commands' }->{ $key };
+        } else {
+          print( "Done.\n" );
+        }
+      }
+      $kernel->post( $src, $replypath, "Commands reloaded.", $dest );
+    } else {
+      $kernel->post( $src, $replypath, "No commands file found.", $dest );
+    }
+  }
+
+OP: |-
+  sub {
+    my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
+    my @args = split( / /, $what );
+    if( $#args == 0 ) {
+      $kernel->post( $src, "do_mode", $dest->{ "dest" }, "+o ".$args[0] );
+      return 1;
+    }
+    if( $#args == 1 ) {
+      $kernel->post( $src, "do_mode", $args[1], "+o ".$args[0] );
+      return 1;
+    }
+    $kernel->post( $src, $replypath, "OP <username> [<channel>]", $dest );
+  }
+OPME: |-
+  sub {
+    my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
+    $kernel->post( $src, "do_mode", $dest->{ "dest" }, "+o $who" );
+  }
+
+UNIDENTIFY: |-
+  sub {
+    my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
+    if( exists( $heap->{ 'identified' } ) && exists( $heap->{ 'identified' }->{ $src.uc( $who ) } ) ) {
+      delete $heap->{ 'identified' }->{ $src.uc( $who ) };
+      $kernel->post( $src, $replypath, "$who: Identification cancelled.", $dest );
+    } else {
+      $kernel->post( $src, $replypath, "$who: You are not identified.", $dest );
+    }
+  }
+
+WHOAMI: |-
+  sub {
+    my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
+    if( exists( $heap->{ 'identified' } ) && exists( $heap->{ 'identified' }->{ $src.uc( $who ) } ) ) {
+      $kernel->post( $src, $replypath, "$who: You are identified as ".$heap->{ 'identified' }->{ $src.uc( $who ) }, $dest );
+    } else {
+      $kernel->post( $src, $replypath, "$who: You are not identified.", $dest );
+    }
+  }
+
+IDENTIFY: |-
+  sub {
+    use Digest::MD5 qw( md5_hex );
+    my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
+    if( $what =~ /^\s*$/ ) {
+      $kernel->post( $src, $replypath, "usage: IDENTIFY <password>", $dest );
+      return;
+    }
+    my( $whom, $password );
+    print( "IDENTIFY: $who for ***** from $src to ".$dest->{ "dest" }." via $replypath\n" );
+  
+    my @array = split( / /, $what );
+    if( scalar( @array ) > 1 ) {
+    	( $whom, $password ) = split( / /, $what, 2 );
+    } else {
+    	( $whom, $password ) = ( $who, $what );
+    }
+  
+    if( exists( $heap->{ 'users' }->{ uc( $whom ) } ) ) {
+      if( $heap->{ 'users' }->{ uc( $whom ) } eq md5_hex( $password ) ) {
+    	$heap->{ 'identified' }->{ $src.uc( $who ) } = uc( $whom );
+    	$kernel->post( $src, $replypath, "Hello, $who.", $dest );
+      } else {
+        $kernel->post( $src, $replypath, "Authentication failed.", $dest );
+      }
+    } else {
+    	$kernel->post( $src, $replypath, "User '$who' not found.", $dest );
+    }
+  }
+
+REGISTER: |-
+  sub {
+    use Digest::MD5 qw( md5_hex );
+    my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
+    $what =~ s/\s+$//;
+    my $nargs = ($what =~ s/ / /g);
+    if( !$nargs ) {
+      if( $what =~ /.+/ ) {
+        $nargs = 1;
+      } else {
+        $nargs = 0;
+      }
+    } else {
+      $nargs++;
+    }
+    
+    if( $nargs < 1 || $nargs > 2 ) {
+      $kernel->post( $src, $replypath, "Usage: REGISTER [<name>] <password> ($nargs args received)", $dest );
+      return;
+    }
+    
+    my( $whom, $password );
+    
+    if( $nargs == 1 ) {
+      $password = $what;
+      $whom = $who;
+    }
+    if( $nargs == 2 ) {
+      ( $whom, $password ) = split( / /, $what, 2 );
+    }
+
+    if( exists( $heap->{ 'users' }->{ uc( $whom ) } ) ) {
+      $kernel->post( $src, $replypath, "Sorry, but the nick '$whom' is already registered.", $dest );
+      return;
+    }
+
+    if( $password ) {
+      $heap->{ 'users' }->{ uc( $whom ) } = md5_hex( $password );
+      DumpFile( "users.yaml", $heap->{ 'users' } );
+      $kernel->post( $src, $replypath, "Done.", $dest );
+    } else {
+      $kernel->post( $src, $replypath, "Bad password.", $dest );
+    }
+  }
+
+PASSWORD: |-
+  sub {
+    use Digest::MD5 qw( md5_hex );
+    my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
+    if( $what !~ /[^ ]+ [^ ]+/ ) {
+      $kernel->post( $src, $replypath, "Usage: PASSWORD <old password> <new password>", $dest );
+      return;
+    }
+    my( $old, $new ) = split( / /, $what, 2 );
+    if( exists( $heap->{ 'users' }->{ uc( $who ) } ) ) {
+      if( $heap->{ 'users' }->{ uc( $who ) } eq md5_hex( $old ) ) {
+        $heap->{ 'users' }->{ uc( $who ) } = md5_hex( $new );
+  	    DumpFile( "users.yaml", $heap->{ 'users' } );
+        $kernel->post( $src, $replypath, "Password changed.", $dest );
+      } else {
+        $kernel->post( $src, $replypath, "Old passwords do not match.", $dest );
+      }
+    } else {
+      $kernel->post( $src, $replypath, "You are not registered.", $dest );
+    }
+  }
+
+SETPASSWORD: |-
+  sub {
+    use Digest::MD5 qw( md5_hex );
+    my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
+    my @args = split( / /, $what );
+    if( $#args != 1 ) {
+      $kernel->post( $src, $replypath, "USAGE: SETPASSWORD <user> <pass>", $dest );
+      return;
+    }
+    my( $whom, $pass ) = split( / /, $what );
+    if( exists( $heap->{ 'users' }->{ uc( $whom ) } ) ) {
+      $heap->{ 'users' }->{ uc( $whom ) } = md5_hex( $pass );
+      DumpFile( "users.yaml", $heap->{ 'users' } );
+      $kernel->post( $src, $replypath, "Password changed.", $dest );
+    } else {
+      $kernel->post( $src, $replypath, "'$whom' is not registered.", $dest );
+    }
+  }
+
+CONFIG: |-
+  sub {
+    my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
+    if( $what ) {
+      my( $subj, $predicate ) = split( / /, $what, 2 );
+      if( $predicate ) {
+        $Destult::config{ uc( $subj ) } = $predicate;
+        DumpFile( "config.yaml", \%Destult::config );
+        $kernel->post( $src, $replypath, "Okay, $who.", $dest );
+      } elsif( exists( $Destult::config{ uc( $subj ) } ) ) {
+        $kernel->post( $src, $replypath, "$subj is '".$Destult::config{ uc( $subj ) }."'.", $dest );
+      } else {
+        $kernel->post( $src, $replypath, "$subj is not found.", $dest );
+      }
+    } else {
+      for my $key ( keys %Destult::config ) {
+        $kernel->post( $src, $replypath, "$key: ".$Destult::config{ $key }, $dest );
+      }
+    }
+  }
+
+DEFINE: |-
+  sub {
+    my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
+    print( "DEFINE: $who for $what from $src to ".$dest->{ "dest" }." via $replypath\n" );
+    my( $subj, $predicate ) = split( / as /, $what, 2 );
+    if( $subj ) {
+      if( $predicate ) {
+        $heap->{ 'db' }->{ uc( $subj ) } = $predicate;
+        DumpFile( "factoids.yaml", $heap->{ 'db' } );
+        $kernel->post( $src, $replypath, "$who: Factoid '$subj' defined as '$predicate'", $dest );
+      } else {
+        delete $heap->{ 'db' }->{ uc( $subj ) } if exists $heap->{ 'db' }->{ uc( $subj ) };
+        DumpFile( "factoids.yaml", $heap->{ 'db' } );
+        $kernel->post( $src, $replypath, "$who: Factoid '$subj' removed", $dest );
+      }
+    } else {
+      $kernel->post( $src, $replypath, "Invalid subject.", $dest );
+    }
+  }
+
+APPEND: |-
+  sub {
+    my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
+    print( "APPEND: $who for $what from $src to ".$dest->{ "dest" }." via $replypath\n" );
+    my( $subj, $predicate ) = split( / with /, $what, 2 );
+    if( exists( $heap->{ 'db' }->{ uc( $subj ) } ) ) {
+      if( length( $predicate ) > 0 ) {
+        $heap->{ 'db' }->{ uc( $subj ) } .= $predicate;
+        DumpFile( "factoids.yaml", $heap->{ 'db' } );
+        $kernel->post( $src, $replypath, "$who: Done.", $dest );
+      } else {
+        $kernel->post( $src, $replypath, "$who: Refusing to append nothing.", $dest );
+      }
+    } else {
+      $kernel->post( $src, $replypath, "$who: '$subj' not found.", $dest );
+    }
+  }
+
+PARSE: |-
+  sub {
+    use YAML qw(LoadFile DumpFile);
+    my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
+    my $factoid = $what;
+    my $arg="";
+    if( !exists( $heap->{ 'db' }->{ uc( $what ) } ) ) {
+    	($factoid,$arg) = split( / /, $what, 2 );
+    	if( !exists( $heap->{ 'db' }->{ uc( $factoid ) } ) ) {
+    		$kernel->post( $src, $replypath, "Attempted to parse non-existent factoid '$what'", $dest );
+    		return;
+    	}
+    }
+    print( "PARSE: $factoid is ".$heap->{ 'db' }->{ uc( $factoid ) }."\n" );
+
+    if( !exists( $heap->{ 'factoidAccess' } ) && -e 'factoidAccess.yaml' ) {
+    	$heap->{ 'factoidAccess' } = LoadFile( 'factoidAccess.yaml' );
+    }
+
+    if( exists( $heap->{ 'factoidAccess' }->{ uc( $factoid ) } ) &&
+      ( !exists( $heap->{ 'identified' }->{ $src.uc( $who ) } ) ||
+        accessLevel( $kernel, $heap, $heap->{ 'identified' }->{ $src.uc( $who ) }, $src ) < $heap->{ 'factoidAccess' }->{ uc( $factoid ) } ) ) {
+      $kernel->post( $src, $replypath, "$who: An access level of ".$heap->{ 'factoidAccess' }->{ uc( $factoid ) }." is required for the factoid '$factoid'", $dest );
+      return;
+    }
+
+    my( $response, $author ) = split( / -- /, $heap->{ 'db' }->{ uc( $factoid ) } );
+    if( $author ) {
+    	$author = " -- ".$author;
+    } else {
+    	$author = "";
+    }
+    if( $response =~ /<wget>(.+)/ ) {
+      $response =~ s/<wget>//;
+      my @targets = split( /[^\\];/, $response );
+      for my $target (@targets) {
+        system( "wget $target -O /dev/null -b -o /dev/null" );
+      }
+      $kernel->post( $src, $replypath, "Okay.", $dest );
+      return;
+    } elsif( $response =~ /<reply>(.+)/ ) {
+      my @responses = split( /\|/, $1 );
+      $response = $responses[ int( rand( scalar( @responses ) ) ) ].$author;
+    } elsif( $response =~ /<alias>(.+)/ ) {
+      $response =~ s/<alias>//;
+      $kernel->post( "core", "cmd", $who, "~+".$response, $src, $dest->{ 'dest' }, $replypath, $dest->{ 'trusted' } );
+      return;
+    } else {
+      my @responses = split( /\|/, $response );
+      $response = "$factoid is ".$responses[ int( rand( scalar( @responses ) ) ) ].$author;
+    }
+    $response =~ s/\$nick/$who/gi;
+    $response =~ s/\$arg/$arg/gi;
+    $kernel->post( "$src", $replypath, $response, $dest );
+  }
+
+LITERAL: |-
+  sub {
+    my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
+    print( "LITERAL: $who for $what from $src to ".$dest->{ "dest" }." via $replypath\n" );
+    if( exists( $heap->{ 'db' }->{ uc( $what ) } ) ) {
+      $kernel->post( "$src", $replypath, "$what is ".$heap->{ 'db' }->{ uc( $what ) }, $dest );
+    } else {
+      $kernel->post( "$src", $replypath, "'$what' not found.", $dest );
+    }
+  }
+
+LISTKEYS: |-
+  sub {
+    my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
+    my $reply = "The following factoids were found: ";
+    my @keys = keys( %{ $heap->{ 'db' } } );
+    @keys = sort @keys;
+    foreach( @keys ) {
+      if( length( $what ) == 0 || m/^$what/i ) {
+        $reply .= "'$_' ";
+      }
+    }
+    $kernel->post( $src, $replypath, $reply, $dest );
+  }
+
+DICTCLEAN: |-
+  sub {
+    my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
+    $heap->{ 'DICT_cache' } = {};
+    $kernel->post( $src, $replypath, "Cleaned.", $dest );
+  }
+
+DICT: |-
+  sub {
+    use WWW::Search;
+    use WWW::Search::UrbanDictionary;
+
+    my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
+    if( $what =~ /^$/ ) {
+    	$kernel->post( $src, $replypath, "USAGE: dict [<dictionary>/][<#>.]<query>\nSee also: dicts",$dest );
+    }
+    if( !exists( $heap->{ 'DICT_cache' } ) ) {
+      $heap->{ 'DICT_cache' } = {};
+   	}
+  
+    my $dict = "default";
+    if( $what =~ /^(.+)\/.*/ ) {
+      $dict = $1;
+      $what = (split( '/', $what, 2))[1];
+    }
+    my $num = 0;
+    if( $what =~ /^([0-9]+)\..*/ ) {
+      $num = ($1 - 1);
+      $what =~ s/^[0-9]+\.//;
+    }
+  
+    if( !exists( $heap->{ 'DICT_cache' }->{ uc( $dict ) } ) ) {
+      $heap->{ 'DICT_cache' }->{ uc( $dict ) } = {};
+    }
+    if( exists( $heap->{ 'DICT_cache' }->{ uc( $dict ) }->{ "$num.$what" } ) ) {
+      print( "DICT: Cached Result", "\n" );
+      $kernel->post( $src, $replypath, $heap->{ 'DICT_cache' }->{ uc( $dict ) }->{ "$num.$what" }, $dest );
+      return;
+    }
+  
+    if( $dict =~ m/^urban/i ) {
+      use JSON;
+      use LWP::Simple;
+      use HTML::Entities;
+      $num += 1;
+      my $page = get( 'http://www.urbandictionary.com/iphone/search/define?term='.$what );
+      my $response = decode_json $page;
+      if( $num > $response->{ "total" } ) {
+        if( $num == 1 ) {
+          $kernel->post( $src, $replypath, "There is no definition for '".$what."'", $dest );
+        } else {
+          $kernel->post( $src, $replypath, "There is no definition #".$num." for '".$what."'", $dest );
+        }
+        return;
+      }
+      my $result = $response->{ "list" }->[ $num-1 ]->{ "word" }.": ".$response->{ "list" }->[ $num-1 ]->{ "definition" };
+      $result = decode_entities( $result );
+      $result =~ s/\n/ /g;
+      $heap->{ 'DICT_cache' }->{ 'URBAN' }->{ "$num.$what" } = $result;
+      $kernel->post( $src, $replypath, $result, $dest );
+    } else {
+      use Net::Dict;
+      print( "DICT: Establish connection.\n" );
+      my $oDict = Net::Dict->new( $Destult::config{ 'DICT_SERVER' } );
+      if( !$oDict ) {
+        $kernel->post( $src, $replypath, "Can't contact dict server.", $dest );
+        return;
+      }
+      if( $dict ne "default" ) {
+        print( "DICT: '".( split( /\//, $what, 2 ) )[0]."' source.\n" );
+        $oDict -> setDicts( ( $dict ) );
+      } else {
+        print( "DICT: Default sources.\n" );
+        $oDict -> setDicts( ( "wn", "jargon", "foldoc", "web1913" ) );
+      }
+  
+      print( "DICT: Grab definition.\n" );
+      my $lookup = $oDict->define( $what );
+      print( "DICT: Parsing.\n" );
+      if( $#{ $lookup } < $num ) {
+        print( "DICT: No result.\n" );
+        if( $num == 0 ) {
+          $kernel->post( $src, $replypath, "No result for '$what'.", $dest );
+        } else {
+          $kernel->post( $src, $replypath, "No result #".$num." for '$what'.", $dest );
+        }
+        return;
+      }
+      my $def = ${@{ $lookup }[$num]}[1];
+  
+      $def =~ s/\n/ /g;
+      $def =~ s/ {2,}/ /g;
+      $def =~ s/ :/:/g;
+      $def =~ s/[^y](((n|v|adj|adv) ?[0-9]?:)|([0-9]:))/\n$1/gi;
+      $def =~ s/\[syn.*(\n|$)/\n/g;
+  #    $def =~ s/;.*//g;
+      print( $def, "\n" );
+      my @def = split( /\n/, $def );
+      my $string = shift( @def );
+      $string =~ s/^/'/;
+      $string =~ s/ *$/':/;
+      my $j = 0;
+      for $def ( @def ) {
+        $def =~ s/ *$//g;
+        if( $def =~ /(n|v|adj|adv) ?[1-3]?:/i ) {
+          chop( $string );
+          $string .= ($j==0?":":".")." $def;";
+          $j++;
+        } elsif( $def =~ /[1-3]:/i ) {
+          $def =~ s/[[:space:]]*$//g;
+          $string .= " $def;";
+        }
+      }
+      chop( $string );
+      $heap->{ 'DICT_cache' }->{ uc( $dict ) }->{ "$num.$what" } = $string;
+      $kernel->post( $src, $replypath, $string, $dest );
+    }
+  }
+
+NSLOOKUP: |-
+  sub {
+    my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
+    if( $what =~ /^[-\w.]+$/ ) {
+        my $response = `host $what`;
+        $kernel->post( $src, $replypath, $response, $dest );
+    } else {
+        $kernel->post( $src, $replypath, "Argument rejected. (Does not match /^[-\\w.]+\$/)", $dest );
+    }
+  }
+
+WIKI: |-
+  sub {
+    my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
+
+    if( !( $what =~ /[a-z0-9]/i ) ) {
+    	$kernel->post( $src, $replypath, "USAGE: ~wiki <article name>", $dest );
+    	return;
+    }
+    use Net::Ping;
+    my $ping = Net::Ping->new();
+    my $time = $ping->ping( "en.wikipedia.org" );
+
+    use WWW::Wikipedia;
+    my $string;
+    my $full = 0;
+    if( $time < 5 ) {
+      my $wiki = WWW::Wikipedia->new();
+      $wiki->timeout( 5 );
+      print( "WIKI: Searching...\n" );
+      my $result;
+      if( substr( $what, 0, 1 ) eq "+" ) {
+        $full = 1;
+        $what = substr( $what, 1 );
+      }
+      eval { $result = $wiki->search( $what ); };
+      $string = $@ if $@;
+  
+      if( $result && $result->text() && $full == 0 ) {
+        print( "WIKI: Processing...\n" );
+        $string = $result->text();
+        $string =~ s/<br>//g;
+        $string =~ s/<(th|td|small)[^<>]*>[^<>]*<\/(th|td|small)>//gi;
+        $string =~ s/<[^<>]*>//g;
+        $string =~ s/\n\s*\n/@@@@@/g;
+        $string =~ s/\n/ /g;
+        $string =~ s/@@@@@/\n/g;
+        $string =~ s/\n/ -- /g;
+        $string =~ s/\s{2,}/ /g;
+        $string =~ s/&mdash;/ - /g;
+      } elsif( $result && $result->fulltext() ) {
+        $string = $result->fulltext();
+        $string =~ s/\n/ /g;
+        $string =~ s/<(th|td|small)[^<>]*>[^<>]*<\/(th|td|small)>//gi;
+        $string =~ s/<[^<>]*>//g;
+        $string =~ s/\s{2,}/ /g;
+      } elsif( !$string ) {
+        print( "WIKI: No Result.\n" );
+        $string = "No results for '$what'.";
+      }
+      if( $full != 0 && $result && $result->related() ) {
+        $string .= "\nRelated: ".join( " -- ", $result->related() );
+      }
+    } else {
+      $string = "Wikipedia.org is responding too slowly (".$time."s).";
+    }
+    $kernel->post( $src, $replypath, $string, $dest );
+  }
+
+ADVERTISE: |-
+  sub {
+    my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
+    print( "ADVERTISE: $who for $what from $src to ".$dest->{ "dest" }." via $replypath\n" );
+    my( $time, $how, $message ) = split( / /, $what, 3 );
+    my( $prot, $type, $targ ) = split( /:/, $how, 3 );
+    $time = int( $time );
+    if( length( $what ) > 0 && $time >= 0 ) {
+      if( $message ) {
+        if( !exists( $heap->{ 'ads' } ) ) {
+          $heap->{ 'ads' } = [];
+        }
+        my $ad = scalar( @{ $heap->{ 'ads' } } );
+        $heap->{ 'ads' }->[ $ad ] = [ $time, $prot, $type, $targ, $message ];
+        $kernel->delay_set( "advertise", $time, $ad );
+        $kernel->post( $src, $replypath, "$who: Advert added as #".$ad, $dest );
+      } else {
+        if( exists( $heap->{ 'ads' }->[ $time ] ) ) {
+          $kernel->post( $src, $replypath, "$who: Ad disabled.", $dest );
+          print( "ADVERTISE: Ad #".$time." disabled.\n" );
+          $heap->{ 'ads' }->[ $time ]->[0] = -1;
+        } else {
+          $kernel->post( $src, $replypath, "$who: Ad #".$time." not found.", $dest );
+          print( "ADVERTISE: Ad #".$time." not found.\n" );
+        }
+      }
+    } else {
+      $kernel->post( $src, $replypath, "Usage: ADVERTISE <period> <outputmodule>:<outputmethod>:<outputtarget> <message>", $dest );
+      $kernel->post( $src, $replypath, "Ex.  : ADVERTISE 3600 mod_irc:send_public_to:#dc Hourly Advertisement", $dest );
+      if( exists( $heap->{ 'ads' } ) ) {
+        $kernel->post( $src, $replypath, "Current advertisements:", $dest );
+        my $i = 0;
+        for( @{ $heap->{ 'ads' } } ) {
+          my( $period, $prot, $type, $targ, $message ) = @{ $_ };
+          $kernel->post( $src, $replypath, "$i: ($period) -> $prot:$type:$targ : $message", $dest );
+          $i++;
+        }
+      }
+    }
+  }
+
+RANDOM: |-
+  sub {
+    my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
+    my @opts;
+    if( $what =~ m/,/ ) {
+    	@opts = split( /\s*,\s*/, $what );
+    } else {
+    	@opts = split( / /, $what );
+    }
+    if( $#opts >= 0 ) {
+      $kernel->post( $src, $replypath, $opts[ int( rand( $#opts+1 ) ) ], $dest );
+    }
+  }
+
+DICE: |-
+  sub {
+    my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
+    my @opts = split( / /, $what, 2 );
+    if( !( $opts[0] =~ /^[0-9]+$/ ) ||
+        !( $opts[1] =~ /^[1-9][0-9]*$/ ) ) {
+      $kernel->post( $src, $replypath, "Usage: dice <Number> <Num.Sides>", $dest );
+      return;
+    }
+
+    if( length( $opts[1] ) * $opts[0] > 300 ) {
+      $kernel->post( $src, $replypath, "Flood prevention triggered; output throttled.", $dest );
+      return;
+    }
+    my $response = "Results: ";
+    for( my $i = 0; $i < $opts[0]; $i++ ) {
+      $response .= int( rand( $opts[1] ) )+1 ." ";
+    }
+    $kernel->post( $src, $replypath, $response, $dest );
+  }
+
+RLSOMETHING: |-
+  sub {
+    my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
+    my $response;
+    my @arrs = split( /\n/, `cat /usr/share/dict/words | grep -i ^r` );
+    $response = $arrs[ int( rand( $#arrs ) ) ]." ";
+    my @ells = split( /\n/, `cat /usr/share/dict/words | grep -i ^l` );
+    $response .= $ells[ int( rand( $#ells ) ) ];
+    $kernel->post( $src, $replypath, $response, $dest );
+  }
+
+SIEVE: |-
+  sub {
+  	my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
+  	my $response;
+    if( !( $what =~ /^([0-9]{2,}|[2-9])$/ ) ) {
+      $kernel->post( $src, $replypath, "Usage: sieve <N> - Calculates the largest prime <= N", $dest );
+      return;
+    }
+    my @array=0..$what;
+    for( my $i = 2; $i <= $what; $i++ ) {
+      next unless exists( $array[$i] );
+      for( my $j = int( $what/$i ); $j > 1; $j-- ) {
+        delete $array[ $i * $j ] if exists $array[ $i * $j ];
+      }
+    }
+    for( my $j = $what; $j >= 0; $j-- ) {
+      if( exists( $array[ $j ] ) ) {
+        $kernel->post( $src, $replypath, $array[ $j ], $dest );
+        return;
+      }
+    }
+  }
+ABORT: |-
+  sub {
+    my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
+    $kernel->post( $src, "do_abort" );
+    $kernel->post( $src, $replypath, "Done.", $dest );
+  }
+BASH: |-
+  sub {
+    my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
+  
+    use Net::Ping;
+    my $ping = Net::Ping->new();
+    my $time = $ping->ping( "bash.org" );
+  
+    unless( $what =~ /^([0-9]+)|(random)$/ ) {
+      $kernel->post( $src, $replypath, "Quote # should be a postive integer.", $dest );
+      return;
+    }
+
+    if( $time < 5 ) {
+      use LWP::UserAgent;
+      my $ua = LWP::UserAgent->new;
+      $ua->timeout(5);
+      my $req = HTTP::Request->new( GET => 'http://bash.org/?'.$what );
+      my $res = $ua->request( $req );
+      my @quotes;
+      if( $res->is_success ) {
+        my $content = $res->content;
+        $content =~ s/[\n\r]//g;
+
+        while( $content =~ s/<p class="quote">.*?<b>(#[0-9]+)<\/b><\/a>.*?<p class="qt">(.*?)<\/p>//i ) {
+          my $num = $1;
+          my $text = $2;
+          $text =~ s/<br \/>/\n/gi;
+          $text =~ s/&lt;/</gi;
+          $text =~ s/&gt;/>/gi;
+          $text =~ s/&amp;/&/gi;
+          $text =~ s/&quot;/"/gi;
+          $text =~ s/&nbsp;/ /gi;
+          push @quotes, [ $num, $text ];
+        }
+        my $quote = $quotes[ int(rand($#quotes+1)) ];
+        $kernel->post( $src, $replypath, $quote->[0].":\n".$quote->[1], $dest );
+      } else {
+      	$kernel->post( $src, $replypath, "Something happened: ".$res->status_line, $dest );
+      }
+    } else {
+    	$kernel->post( $src, $replypath, "bash.org is responding too slowly.", $dest );
+    }
+  }
+
+QDB: |-
+  sub {
+    my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
+
+    unless( $what =~ /^([0-9]+)|(random)$/ ) {
+      $kernel->post( $src, $replypath, "Quote # should be a postive integer.", $dest );
+      return;
+    }
+
+    use LWP::UserAgent;
+    my $ua = LWP::UserAgent->new( agent => "Mozilla/5.0 (Ubuntu; X11; Linux x86_64; rv:8.0) Gecko/20100101 Firefox/8.0" );
+    $ua->timeout(5);
+    my $req = HTTP::Request->new( GET => 'http://qdb.us/?'.$what );
+    my $res = $ua->request( $req );
+    my @quotes;
+    if( $res->is_success or $res->code == "404" ) {
+      my $content = $res->content;
+      $content =~ s/[\n\r]//g;
+
+      while( $content =~ s/<span[^>]*?class=qt id=qt(\d+)>(.*?)<\/span>//i ) {
+        my $num = $1;
+        my $text = $2;
+        my $body;
+        $text =~ s/<br \/>/\n/gi;
+        $text =~ s/<[^>]*>//gi;
+        $text =~ s/&lt;/</gi;
+        $text =~ s/&gt;/>/gi;
+        $text =~ s/&amp;/&/gi;
+        $text =~ s/&quot;/"/gi;
+        $text =~ s/&nbsp;/ /gi;
+
+        $body = $text;
+        if( defined $num && defined $body ) {
+          push @quotes, [$num, $body];
+        }
+        undef $num;
+        undef $body;
+      }
+      if( $#quotes > -1 ) {
+        my $quote = $quotes[ int(rand($#quotes+1)) ];
+        $kernel->post( $src, $replypath, $quote->[0].":\n".$quote->[1], $dest );
+      } else {
+        $kernel->post( $src, $replypath, "No quotes found in response.", $dest );
+      }
+    } else {
+      $kernel->post( $src, $replypath, "Something happened: ".$res->status_line, $dest );
+    }
+  }
+
+TRANSLATE: |-
+  sub {
+    use REST::Google::Translate;
+    REST::Google::Translate->http_referer( "http://cernu.us" );
+    my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
+    if( $what eq "" ) {
+      $kernel->post( $src, $replypath, "Usage: translate <source lang> <dest lang> <message> -- I have no idea what languages I know, so just try two-letter codes.", $dest );
+      return;
+    }
+    my @words = split( / /, $what );
+    my $from = shift @words;
+    my $to = shift @words;
+    my $result = REST::Google::Translate->new(
+      q => join( ' ', @words ),
+      langpair => "$from|$to"
+    );
+    if( $result->responseStatus != 200 ) {
+      $kernel->post( $src, $replypath, "Translation failed. Invalid arguments? Bad language? No clue.", $dest );
+      return;
+    }
+    my $trtx = $result->responseData->translatedText;
+    $trtx =~ s/&#39;/'/gi;
+    $kernel->post( $src, $replypath, $trtx, $dest );
+  }
+
+RSS: |-
+  sub {
+    use WWW::Shorten::TinyURL;
+    use XML::RSS;
+    use Time::CTime;
+  
+    my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
+    my @args = split( / /, $what );
+    if( $#args < 1 || !( $args[1] =~ /^([0-9]+-)?[0-9]+$/ ) ) {
+      $kernel->post( $src, $replypath, "Usage: RSS <source URL> <first>-<last> [<field1> ... <fieldN>]", $dest );
+      $kernel->post( $src, $replypath, "Standard fields are usually 'title,' 'link,' 'description.' Prepend a field with '+' to compress whitespace. Prepend a field with '!' to strip out HTML (and convert, where possible.) Prepend a field with '\@' to have that field start on its own line in the response. Any combination of these three flags is acceptable.", $dest );
+      return;
+    }
+    my $url = shift @args;
+    my $count = shift @args;
+    my( $first, $last );
+    if( $count =~ /^-([0-9]+)$/ ) {
+    	$first = 0;
+    	$last = $1;
+    } elsif( $count =~ /^[0-9]+$/ ) {
+    	# I'd like this to be different, but it has to be this way for legacy purposes.
+    	$first = 0;
+    	$last = $count;
+    } elsif( $count =~ /^([0-9]+)-([0-9]+)$/ ) {
+    	$first = $1;
+    	$last = $2;
+    }
+    print( "RSS: $first to $last\n" );
+    if( $#args == -1 ) {
+    	@args = ( 'superdate', 'supertitle', 'title', 'link' );
+    }
+    
+    my $xml;
+    use LWP::UserAgent;
+    my $ua = LWP::UserAgent->new;
+    $ua->timeout(5);
+    $ua->agent( "Destult" );
+    my $req = HTTP::Request->new( GET => $url );
+    my $res = $ua->request( $req );
+    if( $res->is_success ) {
+      $xml = $res->content;
+    } else {
+      $kernel->post( $src, $replypath, "Failed to fetch RSS feed from $url: ".$res->code.": ".$res->message, $dest );
+      return;
+    }
+    my $rss = new XML::RSS;
+    eval { $rss->parse( $xml ); };
+    if( $@ ) {
+      $kernel->post( $src, $replypath, "Document was fetched, but wasn't valid XML", $dest );
+      return;
+    }
+    my $response = "";
+    my @items;
+    my @nargs;
+    for my $arg( @args ) {
+      if( $arg eq "superdate" ) {
+        push @items, strftime( "%a %b %e %H:%M:%S %Y", localtime );
+      } elsif( $arg =~ /^super/ ) {
+      	my $tmp = substr( $arg, 5 );
+        if( exists( $rss->{ 'channel' }->{ $arg } ) ) {
+          push @items, $rss->{ 'channel' }->{ $arg };
+        }
+      } else {
+      	push @nargs, $arg;
+      }
+    }
+    @args = @nargs;
+    my $n = 0;
+    for my $item ( @{ $rss->{ 'items' } } ) {
+      $n++;
+      if( $n < $first ) {
+      	next;
+      }
+      if( $n > $last ) {
+        last;
+      }
+
+      my @bits;
+      for my $arg( @args ) {
+        my $strip = 0;
+        my $ownline = 0;
+        my $compress = 0;
+        my $oneline = 0;
+        my $shorten = 1;
+        my $elem = $arg;
+        
+        while( $elem =~ /^[+\!@#-]/ ) {
+          if( substr( $elem, 0, 1 ) eq '+' ) {
+            $elem = substr( $elem, 1 );
+            $compress = 1;
+          }
+          if( substr( $elem, 0, 1 ) eq '!' ) {
+            $elem = substr( $elem, 1 );
+            $strip = 1;
+          }
+          if( substr( $elem, 0, 1 ) eq '@' ) {
+            $elem = substr( $elem, 1 );
+            $ownline = 1;
+          }
+          if( substr( $elem, 0, 1 ) eq '#' ) {
+            $elem = substr( $elem, 1 );
+            $oneline = 1;
+          }
+          if( substr( $elem, 0, 1 ) eq '-' ) {
+            $elem = substr( $elem, 1 );
+            $shorten = 0;
+          }
+        }
+        if( exists( $item->{ $elem } ) ) {
+          if( $elem eq "link" ) {
+            if( $shorten ) {
+              push @bits, "<".makeashorterlink( $item->{ 'link' } ).">";
+            } else {
+              push @bits, "<".$item->{ 'link' }.">";
+            }
+          } else {
+            my $tmp = $item->{ $elem };
+            if( $strip == 1 ) {
+              $tmp =~ s/<br ?\/?>/\n/g;
+              $tmp =~ s/<[^>]+>//g;
+            }
+            $tmp =~ s/&nbsp;/ /gi;
+            $tmp =~ s/&lt;/</gi;
+            $tmp =~ s/&gt;/>/gi;
+            $tmp =~ s/&quot;/"/gi;
+            $tmp =~ s/&amp;/&/gi;
+            $tmp =~ s/&mdash;/--/gi;
+            if( $oneline == 1 ) {
+              $tmp =~ s/\n/ /gi;
+            }
+            if( $compress == 1 ) {
+              $tmp =~ s/\n/|/gi;
+              $tmp =~ s/^[|]//;
+              $tmp =~ s/[|]$//;
+              $tmp =~ s/[|][[:space:]]+/|/g;
+              $tmp =~ s/[|]+/|/g;
+            }
+            if( $ownline == 1 ) {
+              $tmp = "\n".$tmp;
+            }
+            push @bits, $tmp;
+          }
+        } else {
+          push @bits, $elem;
+        }
+      }
+      push @items, join( ' ', @bits );
+    }
+    $response .= join( ' | ', @items );
+    $response =~ s/[|[:space:]]+$//gm;
+    $kernel->post( $src, $replypath, $response, $dest );
+  }
+
+JOIN: |-
+  sub {
+    my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
+    my( $chan, $key ) = split( / /, $what, 2 );
+    if( $chan =~ /^[#&][^ ,]+$/ ) {
+      $kernel->post( $src, "do_join", $chan, $key );
+      $kernel->post( $src, $replypath, "Okay.", $dest );
+    } else {
+      $kernel->post( $src, $replypath, "'$chan' is not a valid channel name.", $dest );
+    }
+  }
+
+PART: |-
+  sub {
+    my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
+    if( $what =~ /^[#&][^ ,]+$/ ) {
+      $kernel->post( $src, "do_part", $what );
+      $kernel->post( $src, $replypath, "Okay.", $dest );
+    } else {
+      $kernel->post( $src, $replypath, "'$what' is not a valid channel name.", $dest );
+    }
+  }
+
+IGNORE: |-
+  sub {
+    my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
+    if( $what =~ /^[[:space:]]*$/ ) {
+    	$kernel->post( $src, $replypath, "The following users are ignored: ".join( ' ', keys(%{ $heap->{ 'ignored' } })), $dest );
+    	return;
+    }
+    $what =~ s/[[:space:]]*$//;
+    $what =~ s/^[[:space:]]*//;
+    if( exists( $heap->{ 'ignored' }->{ uc( $what ) } ) ) {
+      $kernel->post( $src, $replypath, "'$what' is already ignored.", $dest );
+      return;
+    }
+    $heap->{ 'ignored' }->{ uc( $what ) } = $who;
+    $kernel->post( $src, $replypath, "'$what' is now ignored.", $dest );
+    DumpFile( "ignored.yaml", $heap->{ 'ignored' } );
+    print( "IGNORE: $who marks $what ignored\n" );
+  }
+
+UNIGNORE: |-
+  sub {
+    my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
+    if( $what =~ /^[[:space:]]*$/ ) {
+    	$kernel->post( $src, $replypath, "Usage: UNIGNORE <name>", $dest );
+    	return;
+    }
+    $what =~ s/[[:space:]]+$//;
+    $what =~ s/^[[:space:]]+//;
+    if( exists( $heap->{ 'ignored' }->{ uc( $what ) } ) ) {
+      delete $heap->{ 'ignored' }->{ uc( $what ) };
+      $kernel->post( $src, $replypath, "'$what' is no longer ignored.", $dest );
+      DumpFile( "ignored.yaml", $heap->{ 'ignored' } );
+      return;
+    }
+    $kernel->post( $src, $replypath, "'$what' is not ignored.", $dest );
+    print( "UNIGNORE: $who marks $what unignored\n" );
+  }
+
+REPLACE: |-
+  sub {
+    my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
+    my( $factoid, $find, $replace ) = split( '/', $what );
+    $factoid =~ s/[[:space:]]+$//gi;
+    $factoid = uc( $factoid );
+    if( exists( $heap->{ 'db' }->{ $factoid } ) ) {
+      my $fact = $heap->{ 'db' }->{ $factoid };
+      eval { $fact =~ s/$find/$replace/gi; };
+      if( $! ) {
+        $kernel->post( $src, $replypath, "Regex Failed: $!", $dest );
+        return;
+      }
+      $heap->{ 'db' }->{ $factoid } = $fact;
+      DumpFile( "factoids.yaml", $heap->{ 'db' } );
+      $kernel->post( $src, $replypath, $fact, $dest );
+    } else {
+      $kernel->post( $src, $replypath, "There is no factoid called '$factoid'.", $dest );
+      return;
+    }
+  }
+
+FANDANGO: |-
+  sub {
+    use POSIX;
+    
+    my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
+    
+    my @args = split( / /, $what );
+    my $page = 1;
+    my $count = 3;
+    my $start = 0;
+    my $end = 2;
+    my $total = 0;
+    my $zip = 0;
+    my $theater = '';
+
+    if( $#args >= 3 ) {
+      if( $args[3] =~ /^[0-9]+$/ ) {
+        $count = $args[3];
+      } else {
+        $kernel->post( $src, $replypath, "Number of items to list per page should be numeric.", $dest );
+        return;
+      }
+    }
+    if( $#args >= 2 ) {
+      if( $args[2] =~ /^[0-9]+$/ ) {
+        $page = $args[2];
+        $start = ($args[2]-1)*$count;
+        $end = $start + $count - 1;
+      } else {
+        $kernel->post( $src, $replypath, "Page number should be numeric.", $dest );
+        return;
+      }
+    }
+    if( $#args >= 1 ) {
+      if( $args[0] =~ /^[0-9]{5}$/ ) {
+        $zip = $args[0];
+      } else {
+        $kernel->post( $src, $replypath, "First argument should be ZIP code.", $dest );
+        return;
+      }
+      $theater = $args[1];
+    }
+    if( $#args == 0 ) {
+      if( $args[0] =~ /^[0-9]{5}$/ ) {
+        my $site;
+        use LWP::UserAgent;
+        my $ua = LWP::UserAgent->new;
+        $ua->timeout(5);
+        my $req = HTTP::Request->new( GET =>  'http://www.fandango.com/TheaterListings.aspx?location='.$args[0] );
+        my $res = $ua->request( $req );
+        if( $res->is_success ) {
+          $site = $res->content;
+        } else {
+          $kernel->post( $src, $replypath, "Accessing Fandango page failed.", $dest );
+        }
+        $site =~ s/&nbsp;/ /gi;
+        my @lines = split( /\n/, $site );
+        my @pages;
+        my @theaters;
+        
+        for my $line( @lines ) {
+          if( $line =~ m!<span class="page">!i && $line =~ m! I !) {
+            $line =~ s/.*(<span class="page")/$1/i;
+            $line =~ s/<.+?>//g;
+            $line =~ s/[^0-9 ]//g;
+            $line =~ s/[[:space:]]+/ /g;
+            $line =~ s/(^[[:space:]]+)|([[:space:]]+$)//g;
+            @pages = split( / /, $line );
+            last;
+          }
+        }
+        if( $#pages == -1 ) {
+          @pages = ( 0 );
+        }
+        for my $page( @pages ) {
+          $site = get( 'http://www.fandango.com/TheaterListings.aspx?pn='.$page.'&location='.$args[0] );
+          $site =~ s/&nbsp;/ /gi;
+          @lines = split( /\n/, $site );
+          for my $line( @lines ) {
+            if( $line =~ m!<a class="titleLink" href="http://www.fandango.com/TheaterPage.aspx.*?location=([^&]+)&tid=([^"]+)">([^<]+)</a>!i ) {
+              push @theaters, [ $3, $1, $2 ];
+            }
+          }
+        }
+        $kernel->post( $src, $replypath, ($#theaters+1)." theater".($#theaters==0?"":"s")." near ZIP ".$args[0].":", $dest );
+        my $i = 0;
+        for my $theater( @theaters ) {
+          $kernel->post( $src, $replypath, (++$i).": ".$theater->[ 0 ].": ".$theater->[ 1 ]." ".$theater->[ 2 ], $dest );
+        }
+        return;
+      } else {
+        $kernel->post( $src, $replypath, "First argument should be ZIP code.", $dest );
+        return;
+      }
+    }
+    if( $#args == -1 ) {
+      $kernel->post( $src, $replypath, "USAGE: FANDANGO <ZIP> [<THEATER> [<Page#> [<MoviesPerPage>]]]", $dest );
+      return;
+    }
+    
+    my $site = get( 'http://www.fandango.com/TheaterPage.aspx?location='.$zip.'&tid='.$theater );
+    $site =~ s/&nbsp;/ /gi;
+    $site =~ s/[[:space:]]+/ /g;
+    my @movies = split( /<div class="?theaterSpaceDivider"? ?>/, $site );
+    pop @movies;
+    @movies = split( /<div class="movieInfo">/, join( ' ', @movies ) );
+    shift @movies;
+    $total = $#movies;
+    if( $total < $start ) {
+      $kernel->post( $src, $replypath, "Page #$page is out of range.", $dest );
+      return;
+    }
+    @movies = @movies[ $start..$end ];
+    $kernel->post( $src, $replypath, "Page $page of ".ceil(($total+1)/$count), $dest );
+    for my $movie( @movies ) {
+      $movie =~ s/<span class="bullet">.*?<\/span>//gi;
+      $movie =~ s/<span class="showInstruction">.*?<\/span>.*?<\/span>//gi;
+      $movie =~ s/<span class="movieCast">.*?<\/span>.*?<\/span>//gi;
+      $movie =~ s/<span class="?movieSynopsis"?>.*?<\/span>//gi;#.*?<\/span>//gi;
+      $movie =~ s/<span class="showtimeSeparator"> I <\/span>/ /gi;
+      $movie =~ s/<[^>]*>//g;
+      $movie =~ s/[[:space:]]+/ /g;
+      $kernel->post( $src, $replypath, $movie, $dest );
+    }
+  }
+WEBTENDER: |-
+  sub {
+    use YAML qw(LoadFile DumpFile);
+    use LWP::UserAgent;
+
+    my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
+    
+    if( !exists( $heap->{ 'WEBTENDER_cache' } ) ) {
+      if( -f 'webtenderCache.yaml' ) {
+        $heap->{ 'WEBTENDER_cache' } = LoadFile( "webtenderCache.yaml" );
+      } else {
+        $heap->{ 'WEBTENDER_cache' } = {};
+      }
+    }
+    
+    if( !exists( $heap->{ 'WEBTENDER_cache' }->{ uc( $what ) } ) ) {
+      my $ua = LWP::UserAgent->new(
+        agent => "Mozilla/5.0 (X11; U; Linux i686; en-US; rv:1.8) Gecko/20051224 Debian/1.5.dfsg-3 Firefox/1.5"
+      );
+      $ua->timeout(5);
+      my $response = $ua->get( 'http://www.webtender.com/cgi-bin/search?name="'.$what.'"' );
+      if( $response->{ '_rc' } != 200 ) {
+        $kernel->post( $src, $replypath, "Failed to retrieve search results.", $dest );
+        return;
+      };
+      my $dbn = undef;
+      OUTER:
+      for my $line( split( "\n", $response->{ '_content' } ) ) {
+        if( $line =~ /db\/drink\/([0-9]+)/ ) {
+          $dbn = $1;
+          last OUTER;
+        }
+      }
+      if( !defined( $dbn ) ) {
+      	$kernel->post( $src, $replypath, "No match for '$what'", $dest );
+      	return;
+      }
+      $response = $ua->get( 'http://www.webtender.com/db/drink/'.$dbn );
+      if( $response->{ '_rc' } != 200 ) {
+        $kernel->post( $src, $replypath, "Failed to retrieve drink details.", $dest );
+        return;
+      };
+      my $result;
+      my $mode = 0;
+      for my $line( split( "\n", $response->{ '_content' } ) ) {
+        if( $line =~ /<H1>([^<]+)/ ) {
+          $result .= $1."\n";
+        } elsif( $line =~ /<H3>(Ingredients:)/i ) {
+          $result .= $1."\n";
+          $mode = 1;
+        } elsif( $line =~ /<H3>(Mixing Instructions:)/i ) {
+          $result .= "$1 ";
+          $mode = 2;
+        } elsif( $mode == 1 ) {
+          if( $line =~ /<LI>(.*)/i ) {
+            my $tmp = $1;
+            $tmp =~ s/<[^>]*>//gi;
+            $result .= "* $tmp\n";
+          } elsif( $line =~ /<\/UL>/i ) {
+            $mode = 0;
+          }
+        } elsif( $mode == 2 ) {
+          if( $line =~ /<P>(.*)<\/P>/i ) {
+            my $tmp = $1;
+            $tmp =~ s/<[^>]*>//gi;
+            $result .= "$tmp\n";
+            $mode = 0;
+          }
+        }
+      }
+      $heap->{ 'WEBTENDER_cache' }->{ uc( $what ) } = $result;
+      DumpFile( "webtenderCache.yaml", $heap->{ 'WEBTENDER_cache' } );
+    }
+  
+    my $result = $heap->{ 'WEBTENDER_cache' }->{ uc( $what ) };
+    $result =~ s/\n+/\n/g;
+    $result =~ s/\n$//g;
+    $kernel->post( $src, $replypath, $result, $dest );
+  }
+
+SEEN: |-
+  sub {
+    use POSIX;
+    my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
+    $what =~ s/(^[[:space:]]+)|([[:space:]]+$)//g;
+    if( exists( $heap->{ 'seen' } ) && exists( $heap->{ 'seen' }->{ uc( $what ) } ) ) {
+      my $t = time - $heap->{ 'seen' }->{ uc( $what ) };
+      my $response;
+      if( $t > 86400 ) {
+        $response .= floor($t/86400)."d ";
+        $t = $t % 86400;
+      }
+      if( $t > 3600 ) {
+        $response .= floor($t/3600)."h ";
+        $t = $t % 3600;
+      }
+      if( $t > 60 ) {
+        $response .= floor($t/60)."m ";
+        $t = $t % 60;
+      }
+      $response .= $t."s ago";
+      $kernel->post( $src, $replypath, "$what last seen $response", $dest );
+    } else {
+      $kernel->post( $src, $replypath, "I haven't seen $what.", $dest );
+    }
+  }
+
+MORSE: |-
+  sub {
+    my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
+    my $result;
+    my %morse = (
+      'A' => ".-",    'B' => "-...",  'C' => "-.-.",  'D' => "-..",
+      'E' => ".",     'F' => "..-.",  'G' => "--.",   'H' => "....",
+      'I' => "..",    'J' => ".---",  'K' => "-.-",   'L' => ".-..",
+      'M' => "--",    'N' => "-.",    'O' => "---",   'P' => ".--.",
+      'Q' => "--.-",  'R' => ".-.",   'S' => "...",   'T' => "-",
+      'U' => "..-",   'V' => "...-",  'W' => ".--",   'X' => "-..-",
+      'Y' => "-.--",  'Z' => "--..",  '1' => ".----", '2' => "..---",
+      '3' => "...--", '4' => "....-", '5' => ".....", '6' => "-....",
+      '7' => "--...", '8' => "---..", '9' => "----.", '0' => "-----",
+    );
+    for( my $i = 0; $i < length( $what ); $i++ ) {
+      my $ch = uc( substr( $what, $i, 1 ) );
+      if( $ch eq ' ' ) {
+        $result .= "  ";
+      } elsif( exists( $morse{ $ch } ) ) {
+        $result .= $morse{ $ch }."   ";
+      }
+    }
+    $kernel->post( $src, $replypath, $result, $dest );
+  }
+
+UPTIME: |-
+  sub {
+    use POSIX;
+    my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
+    my( $s, $m, $h, $d, $M, $y ) = gmtime( $heap->{ 'start' } );
+    $y += 1900;
+    my $response = "Core session started on ".sprintf( "%04d-%02d-%02d %02d:%02D:%02d", $y, $M, $d, $h, $m, $s );
+    $response .= ", so I have been running for ";
+    my $t = time - $heap->{ 'start' };
+    if( $t > 86400 ) {
+      $response .= floor($t/86400)."d ";
+      $t = $t % 86400;
+    }
+    if( $t > 3600 ) {
+      $response .= floor($t/3600)."h ";
+      $t = $t % 3600;
+    }
+    if( $t > 60 ) {
+      $response .= floor($t/60)."m ";
+      $t = $t % 60;
+    }
+    $response .= $t."s.";
+    $kernel->post( $src, $replypath, $response, $dest );
+  }
+
+RSVP: |-
+  sub {
+    use YAML qw(LoadFile DumpFile);
+    my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
+    $who = lc( $who );
+    if( ! -e ( "rsvps.yaml" ) ) {
+      $heap->{ 'rsvp' } = {};
+      DumpFile( "rsvps.yaml", $heap->{ 'rsvp' } );
+    }
+    if( !exists( $heap->{ "rsvp" } ) ) {
+      eval { $heap->{ 'rsvp' } = LoadFile( "rsvps.yaml" ) };
+      if( $! ) {
+        $heap->{ 'rsvp' } = {};
+      }
+    }
+    if( exists( $heap->{ "rsvp" }->{ $who } ) ) {
+      delete $heap->{ "rsvp" }->{ $who };
+      $kernel->post( $src, $replypath, "RSVP removed.", $dest );
+    } else {
+      $heap->{ "rsvp" }->{ $who } = time;
+      $kernel->post( $src, $replypath, "RSVP added.", $dest );
+    }
+    DumpFile( "rsvps.yaml", $heap->{ 'rsvp' } );
+  }
+
+ARSVP: |-
+  sub {
+    my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
+    $what = lc( $what );
+    $what =~ s/(^[[:space:]]*)|([[:space:]]*$)//g;
+    if( ! -e ( "rsvps.yaml" ) ) {
+      $heap->{ 'rsvp' } = {};
+      DumpFile( "rsvps.yaml", $heap->{ 'rsvp' } );
+    }
+    if( !exists( $heap->{ "rsvp" } ) ) {
+      eval { $heap->{ 'rsvp' } = LoadFile( "rsvps.yaml" ) };
+      if( $! ) {
+        $heap->{ 'rsvp' } = {};
+      }
+    }
+    if( exists( $heap->{ "rsvp" }->{ $what } ) ) {
+      delete $heap->{ "rsvp" }->{ $what };
+      $kernel->post( $src, $replypath, "RSVP for '$what' removed.", $dest );
+    } else {
+      $heap->{ "rsvp" }->{ $what } = time;
+      $kernel->post( $src, $replypath, "RSVP for '$what' added.", $dest );
+    }
+    DumpFile( "rsvps.yaml", $heap->{ 'rsvp' } );
+  }
+
+RSVPS: |-
+  sub {
+    my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
+    if( -e ( "rsvps.yaml" ) ) {
+      eval { $heap->{ 'rsvp' } = LoadFile( "rsvps.yaml" ) };
+    }
+    if( !exists( $heap->{ "rsvp" } ) ) {
+      $kernel->post( $src, $replypath, "No RSVPs found.", $dest );
+    } else {
+      my @names = keys %{ $heap->{ "rsvp" } };
+      if( scalar( @names ) == 0 ) {
+        $kernel->post( $src, $replypath, "No RSVPs found.", $dest );
+      } else {
+        my $reply = "";
+        for my $name ( @names ) {
+          if( $reply ne "" ) {
+            $reply .= ", $name";
+          } else {
+            $reply = $name;
+          }
+        }
+        $kernel->post( $src, $replypath, "RSVPs received: $reply", $dest );
+      }
+    }
+  }
+
+CLEARRSVP: |-
+  sub {
+    my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
+    if( !exists( $heap->{ "rsvp" } ) ) {
+      $kernel->post( $src, $replypath, "No RSVPs found.", $dest );
+    } else {
+      delete $heap->{ "rsvp" };
+      if( -e ( "rsvps.yaml" ) ) {
+        unlink 'rsvps.yaml';
+      }
+      $kernel->post( $src, $replypath, "RSVPs cleared.", $dest );
+    }
+  }
+
+GROUPHUG: |-
+  sub {
+    my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
+    my @hugs;
+
+    use LWP::UserAgent;
+    my $ua = LWP::UserAgent->new;
+    $ua->timeout(5);
+    my $req = HTTP::Request->new( GET => 'http://grouphug.us/random' );
+    my $res = $ua->request( $req );
+    if( $res->is_success ) {
+      my $content = $res->content;
+      $content =~ s/[\n\r]//g;
+      while( $content =~ s/<td class="conf-id" valign="top">.*?<h4><a href="[^"]*">([0-9]+)<\/a>.*?<td class="conf-text">(.*?)<\/td>//i ) {
+        my $text = "$1: $2";
+        $text =~ s/<br \/>/ /gi;
+        $text =~ s/[[:space:]]+/ /gi;
+        $text =~ s/<[^>]*>//gi;
+        $text =~ s/&lt;/</gi;
+        $text =~ s/&gt;/>/gi;
+        $text =~ s/&amp;/&/gi;
+        $text =~ s/&quot;/"/gi;
+        $text =~ s/&nbsp;/ /gi;
+        push @hugs, $text;
+      }
+      my $hug = $hugs[ int( rand( $#hugs+1 ) ) ];
+      $kernel->post( $src, $replypath, $hug, $dest );
+    } else {
+      $kernel->post( $src, $replypath, "Failed to fetch list of hugs.", $dest );
+    }
+  }
+
+CHECKMEMO: |-
+  sub {
+    my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
+    if( !exists( $heap->{ 'memo' } ) ) {
+      $heap->{ 'memo' } = {};
+    }
+    if( !exists( $heap->{ 'memo' }->{ uc( $who ) } ) ) {
+      $kernel->post( $src, $replypath, "No memos found.", $dest );
+      return 1;
+    }
+    my @memos = @{ $heap->{ 'memo' }->{ uc( $who ) } };
+    for my $memo( @memos ) {
+    	my @memo = @$memo;
+        my $t = time - $memo[1];
+        my $response = "";
+        if( $t > 86400 ) {
+          $response .= floor($t/86400)."d ";
+          $t = $t % 86400;
+        }
+        if( $t > 3600 ) {
+          $response .= floor($t/3600)."h ";
+          $t = $t % 3600;
+        }
+        if( $t > 60 ) {
+          $response .= floor($t/60)."m ";
+          $t = $t % 60;
+        }
+        $response .= $t."s";
+    	$kernel->post( $src, $replypath, "From: ".$memo[0].", $response ago: ".$memo[2], $dest );
+    	print( "MEMO: Delivered from $memo[0] to $who after $response\n" );
+    }
+    delete $heap->{ 'memo' }->{ uc( $who ) };
+  	DumpFile( "memos.yaml", $heap->{ 'memo' } );
+  }
+
+COUNTMEMO: |-
+  sub {
+    my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
+    if( !exists( $heap->{ 'memo' } ) ) {
+      $heap->{ 'memo' } = {};
+    }
+    if( !exists( $heap->{ 'memo' }->{ uc( $who ) } ) ) {
+      $kernel->post( $src, $replypath, "No memos found.", $dest );
+      return 1;
+    }
+    my @memos = @{ $heap->{ 'memo' }->{ uc( $who ) } };
+    my $count = scalar @memos;
+    $kernel->post(
+        $src,
+        $replypath,
+        "You have $count memo".($count==1?"":"s")." waiting. To check your memos, please first REGISTER (if you haven't already) and then IDENTIFY.",
+        $dest
+    );
+  }
+
+MEMOLIST: |-
+  sub {
+    my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
+    if( !exists( $heap->{ 'memo' } ) ) {
+      $kernel->post( $src, $replypath, "No memos.", $dest );
+      return 0;
+    }
+    if( length $what > 0 ) {
+      if( !exists( $heap->{ "memo" }->{ uc( $what ) } ) ) {
+        $kernel->post( $src, $replypath, "No memos for $what.", $dest );
+        return 0;
+      }
+      my @memos = @{ $heap->{ "memo" }->{ uc( $what ) } };
+      my $i = 0;
+      my $j = scalar @memos;
+      for my $memo (@memos) {
+        my @memo = @$memo;
+      	$i++;
+        $kernel->post( $src, $replypath, "($i/$j) From $memo[0] ".(time-$memo[1])."s ago: $memo[2]", $dest );
+      }
+    } else {
+      my $resp = "~MEMOLIST <name> to show user's memos. Users: ";
+      $resp .= join( ", ", keys( %{ $heap->{ "memo" } } ) );
+      $kernel->post( $src, $replypath, $resp, $dest );
+    }
+  }
+
+MEMOWIPE: |-
+  sub {
+    my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
+    if( !exists( $heap->{ 'memo' } ) ) {
+      $kernel->post( $src, $replypath, "No memos.", $dest );
+      return 0;
+    }
+    if( length $what > 0 ) {
+      if( !exists( $heap->{ "memo" }->{ uc( $what ) } ) ) {
+        $kernel->post( $src, $replypath, "No memos for $what.", $dest );
+        return 0;
+      }
+      $kernel->post( $src, $replypath, "Poof.", $dest );
+      delete $heap->{ "memo" }->{ uc( $what ) };
+    } else {
+      $kernel->post( $src, $replypath, "Usage: MEMOWIPE <user>", $dest );
+    }
+  }
+
+MEMOMOVE: |-
+  sub {
+    my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
+    if( !exists( $heap->{ 'memo' } ) ) {
+      $kernel->post( $src, $replypath, "No memos.", $dest );
+      return 0;
+    }
+    my @args = split( / /, $what );
+    if( scalar @args == 2 ) {
+      if( !exists( $heap->{ "memo" }->{ uc( $args[0] ) } ) ) {
+        $kernel->post( $src, $replypath, "No memos for $args[0].", $dest );
+        return 0;
+      }
+      $kernel->post( $src, $replypath, "Mail forwarded. Eat your heart out, USPS.", $dest );
+      push @{ $heap->{ "memo" }->{ uc( $args[1] ) } }, @{ $heap->{ "memo" }->{ uc( $args[0] ) } };
+      delete $heap->{ "memo" }->{ uc( $args[0] ) };
+    } else {
+      $kernel->post( $src, $replypath, "Usage: MEMOMOVE <from> <to>", $dest );
+    }
+  }
+
+MEMO: |-
+  sub {
+    my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
+    if( ($what =~ s/ / /g) < 1 ) {
+      $kernel->post( $src, $replypath, "Usage: MEMO <recipient> <message>", $dest );
+      return;
+    }
+    my( $rec, $msg ) = split( / /, $what, 2 );
+    $rec =~ s/:$//;
+    print( "MEMO: From $who for $rec\n" );
+  	if( !exists( $heap->{ 'memo' } ) ) {
+  		$heap->{ 'memo' } = {};
+  	}
+  	if( !exists( $heap->{ 'memo' }->{ uc( $rec ) } ) ) {
+  		$heap->{ 'memo' }->{ uc( $rec ) } = [];
+  	}
+  	push @{ $heap->{ 'memo' }->{ uc( $rec ) } }, [ $who, time, $msg ];
+  	DumpFile( "memos.yaml", $heap->{ 'memo' } );
+  	$kernel->post( $src, $replypath, "Memo left for $rec.", $dest );
+  }
+
+SHORTEN: |-
+  sub {
+    my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
+    my( $service, $url ) = split( / /, $what, 2 );
+    if( !defined( $service ) ) {
+      $kernel->post( $src, $replypath, "USAGE: SHORTEN [<service>] <URL>, where <service> is one of (potentially) BabyURL, Linkz, MakeAShorterLink, Metamark, NotLong, OneShortLink, Shorl, TinyClick, TinyLink, or TinyURL*. (* designates the default service.) Many of these do not work.", $dest );
+      return;
+    }
+    if( !defined( $url ) ) {
+      $url = $service;
+      $service = "TinyURL";
+    }
+    $service =~ s/[^a-z]//gi;
+    eval "use WWW::Shorten::$service";
+    if( $@ ) {
+    	$kernel->post( $src, $replypath, "Loading 'WWW::Shorten::$service' failed: $@", $dest );
+    	return;
+    }
+    if( !exists( $heap->{ 'urls' } ) ) {
+      $heap->{ 'urls' } = {};
+    }
+    if( exists( $heap->{ 'urls' }->{ uc( $url ) } ) ) {
+      my @arr = @{ $heap->{ 'urls' }->{ uc( $url ) } };
+      $kernel->post( $src, $replypath, $arr[2]." [first: ".$arr[0]."/".$arr[1]."]", $dest );
+    } else {
+      my $url = makeashorterlink( $url );
+      if( defined $url ) {
+        $heap->{ 'urls' }->{ uc( $url ) } = [ $who, $dest->{ 'dest' }, $url ];
+        $kernel->post( $src, $replypath, "$url [$who]", $dest );
+      } else {
+        $kernel->post( $src, $replypath, "Shortening URL failed.", $dest );
+      }
+    }
+  }
+FLUSHURLS: |-
+  sub {
+    my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
+  	$heap->{ 'urls' } = {};
+  	$kernel->post( $src, $replypath, "URL cache flushed.", $dest );
+  }
+GETLINE: |-
+  sub {
+    use LWP::Simple;
+    my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
+    if( length( $what ) == 0 ) {
+      $kernel->post( $src, $replypath, "Usage: GETLINE <URL>", $dest );
+      return;
+    }
+    my $text = get( $what );
+    if( !$text ) {
+      $kernel->post( $src, $replypath, "Failed to retrieve URL.", $dest );
+      return;
+    }
+    $kernel->post( $src, $replypath, substr( $text, 0, 354 ), $dest );
+  }
+
+KARMADOWN: |-
+  sub {
+    my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
+    if( !exists( $heap->{ "karma" } ) ) {
+      if( -e "karma.yaml" ) {
+        $heap->{ "karma" } = LoadFile( "karma.yaml" );
+      } else {
+        $heap->{ "karma" } = {};
+      }
+    }
+    $heap->{ "karmalast" } = {} unless exists( $heap->{ "karmalast" } );
+    $heap->{ "karma" }->{ uc( $what ) } = 0 unless exists( $heap->{ "karma" }->{ uc( $what ) } );
+    my $delay = 60 * abs( $heap->{ "karma" }->{ uc( $what ) } );
+    if( $heap->{ "karmalast" }->{ uc( '-'.$what ) } > time-$delay ) {
+      print( "KARMA: <$who> $what-- IGNORED\n" );
+      return;
+    }
+    $heap->{ "karmalast" }->{ uc( '-'.$what ) } = time;
+    $heap->{ "karma" }->{ uc( $what ) }--;
+    DumpFile( "karma.yaml", $heap->{ 'karma' } );
+    print( "KARMA: <$who> $what--\n" );
+  }
+
+KARMAUP: |-
+  sub {
+    my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
+    if( !exists( $heap->{ "karma" } ) ) {
+      if( -e "karma.yaml" ) {
+        $heap->{ "karma" } = LoadFile( "karma.yaml" );
+      } else {
+        $heap->{ "karma" } = {};
+      }
+    }
+    $heap->{ "karmalast" } = {} unless exists( $heap->{ "karmalast" } );
+    $heap->{ "karma" }->{ uc( $what ) } = 0 unless exists( $heap->{ "karma" }->{ uc( $what ) } );
+    my $delay = 60 * abs( $heap->{ "karma" }->{ uc( $what ) } );
+    if( $heap->{ "karmalast" }->{ uc( '+'.$what ) } > time-$delay ) {
+      print( "KARMA: <$who> $what++ IGNORED\n" );
+      return;
+    }
+    $heap->{ "karmalast" }->{ uc( '+'.$what ) } = time;
+    $heap->{ "karma" }->{ uc( $what ) }++;
+    DumpFile( "karma.yaml", $heap->{ 'karma' } );
+    print( "KARMA: <$who> $what++\n" );
+  }
+
+KARMASET: |-
+  sub {
+    my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
+    if( !exists( $heap->{ "karma" } ) ) {
+      if( -e "karma.yaml" ) {
+        $heap->{ "karma" } = LoadFile( "karma.yaml" );
+      } else {
+        $heap->{ "karma" } = {};
+      }
+    }
+    if( $what =~ /^([^ ]+) (-?[0-9]+)$/ ) {
+      my $value = $2;
+      $what = $1;
+      $heap->{ "karma" }->{ uc( $what ) } = $value;
+      DumpFile( "karma.yaml", $heap->{ 'karma' } );
+      print( "KARMA: <$who> $what = $value\n" );
+      $kernel->post( $src, $replypath, "Set.", $dest );
+    } else {
+      $kernel->post( $src, $replypath, "Usage: KARMASET <what> <value>", $dest );
+    }
+  }
+
+KARMACLEAN: |-
+  sub {
+    my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
+    if( !exists( $heap->{ "karma" } ) ) {
+      if( -e "karma.yaml" ) {
+        $heap->{ "karma" } = LoadFile( "karma.yaml" );
+      } else {
+        $kernel->post( $src, $replypath, "Karma has begun anew.", $dest );
+        return;
+      }
+    }
+    if( exists( $heap->{ "karma" }->{ $what } ) ) {
+      delete $heap->{ "karma" }->{ $what };
+    } else {
+      for my $k( keys %{ $heap->{ "karma" } } ) {
+        if( $k =~ /[[:space:]]/ || $k =~ /^$/ ) {
+          delete $heap->{ "karma" }->{ $k };
+        }
+      }
+    }
+    $kernel->post( $src, $replypath, "Squeak squeak.", $dest );
+    DumpFile( "karma.yaml", $heap->{ 'karma' } );
+  }
+
+KARMA: |-
+  sub {
+    my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
+    if( $what =~ /^[[:space:]]*$/ ) {
+      $kernel->post( $src, $replypath, "Usage: Karma {<Victim>,{+,-}<N>}", $dest );
+      return;
+    }
+    if( !exists( $heap->{ "karma" } ) ) {
+      if( -e "karma.yaml" ) {
+        $heap->{ "karma" } = LoadFile( "karma.yaml" );
+      } else {
+        $kernel->post( $src, $replypath, "Karma has begun anew.", $dest );
+        return;
+      }
+    }
+    if( $what =~ /^([+-])([1-9][0-9]*)$/ ) {
+      my $target = $2;
+      my $mult = ($1 eq "-"?-1:1);
+      my @response;
+      my %karma = %{ $heap->{ "karma" } };
+      my $count = scalar keys %karma;
+      if( $target > $count ) {
+        $target = $count;
+      }
+  
+      for( my $i = 0; $i < $target; $i++ ) {
+        push @response, [0,undef];
+      }
+      
+      for my $key (keys %karma) {
+        if( !defined( $response[ 0 ]->[1] ) || $response[ 0 ]->[0]*$mult < $karma{ $key }*$mult ) {
+          $response[ 0 ] = [ $karma{ $key }, $key ];
+          if( $mult == 1 ) {
+            @response = sort { $a->[0] <=> $b->[0] } @response;
+          } else {
+            @response = sort { $b->[0] <=> $a->[0] } @response;
+          }
+        }
+      }
+      @response = reverse @response;
+      my $resp = $response[0]->[1]." (".$response[0]->[0].")";
+      for( my $i = 1; $i < scalar @response; $i++ ) {
+      	next unless defined $response[ $i ]->[1];
+        $resp .= ", ".$response[ $i ]->[1]." (".$response[ $i ]->[0].")";
+      }
+      $kernel->post( $src, $replypath, ($mult eq "-1"?"Bottom":"Top")." $target: $resp", $dest );
+    } else {
+      if( exists( $heap->{ "karma" }->{ uc( $what ) } ) ) {
+        $kernel->post( $src, $replypath, "$what has ".$heap->{ "karma" }->{ uc( $what ) }." karma", $dest );
+      } else {
+        $kernel->post( $src, $replypath, "$what has no karma.", $dest );
+      }
+    }
+  }
+
+SAY: |-
+  sub {
+    my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
+    $kernel->post( $src, $replypath, $what, $dest );
+  }
+
+TITLE: |-
+  sub {
+    use POE::Component::IRC::Common qw( :ALL );
+    my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
+    if( $what !~ /^https?:\/\/.+$/ ) {
+      $kernel->post( $src, $replypath, "Usage: TITLE <URL>", $dest );
+      return;
+    }
+  
+    my $short;
+    if( $what =~ /^https?:\/\/(snipurl|tinyurl)\.com\/.*/i ) {
+      $short = $what;
+    } else {
+      use WWW::Shorten::TinyURL;
+      $short = makeashorterlink( $what );
+      if( !$short ) {
+        $short = $what;
+      }
+    }
+    use LWP::UserAgent;
+    my $ua = LWP::UserAgent->new;
+    $ua->timeout(5);
+    $ua->max_size( 10240 );
+    my $req = HTTP::Request->new( GET => $what );
+    my $res = $ua->request( $req );
+    if( $res->is_success ) {
+      my $content = $res->content;
+      if( $content =~ /<title[^>]*>(.*?)<\/title>/si ) {
+        use HTML::Entities;
+        my $title = decode_entities( $1 );
+        $title =~ s/[[:space:]]+/ /gs;
+        $title =~ s/(^[[:space:]]*)|([[:space:]]*$)//gs;
+        $kernel->post( $src, $replypath, BOLD . $short . NORMAL . " ($title)", $dest );
+      } else {
+      	my $resp = BOLD;
+      	$resp .= $short;
+      	$resp .= NORMAL;
+        $kernel->post( $src, $replypath, $resp, $dest );
+      }
+    }
+  }
+
+TWITTERCLEAR: |-
+  sub {
+    my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
+    unlink( 'twitterUsers.yaml' );
+    delete( $heap->{ 'twitterUsers' } );
+    $kernel->post( $src, $replypath, "Twitter user database cleared.", $dest );
+  }
+
+TWITTER: |-
+  sub {
+    my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
+  
+    use Net::OAuth;
+    $Net::OAuth::PROTOCOL_VERSION = Net::OAuth::PROTOCOL_VERSION_1_0A;
+    use Digest::MD5 qw( md5_hex );
+    use HTTP::Request::Common;
+    use LWP::UserAgent;
+    
+    my $userAgent = LWP::UserAgent->new();
+    my $nonce = md5_hex( time.rand );
+    
+    if( !exists( $heap->{ 'twitterUsers' } ) ) {
+      if( -e 'twitterUsers.yaml' ) {
+        $heap->{ 'twitterUsers' } = LoadFile( 'twitterUsers.yaml' );
+      } else {
+        $heap->{ 'twitterUsers' } = {};
+      }
+    }
+
+    if( $what =~ /^\s*$/ ) {
+      $kernel->post( $src, $replypath, "Usage: TWITTER <message>", $dest );
+      return;
+    }
+  
+    if( exists( $heap->{ 'twitterUsers' }->{ uc( $who ) } ) ) {
+      if( $heap->{ 'twitterUsers' }->{ uc( $who ) }->{ "state" } == 0 ) {
+        my $oaRequest = Net::OAuth->request( "access token" )->new(
+          consumer_key     => $Destult::config{ "TWITTER_C_K" },
+          consumer_secret  => $Destult::config{ "TWITTER_C_S" },
+          request_url      => 'https://api.twitter.com/oauth/access_token',
+          request_method   => 'POST',
+          signature_method => 'HMAC-SHA1',
+          timestamp        => time,
+          nonce            => $nonce,
+          token            => $heap->{ 'twitterUsers' }->{ uc( $who ) }->{ "request_token" },
+          token_secret     => $heap->{ 'twitterUsers' }->{ uc( $who ) }->{ "request_secret" },
+          verifier         => $what,
+        );
+        $oaRequest->sign();
+        my $response = $userAgent->request( POST $oaRequest->to_url() );
+        if( !$response->is_success() ) {
+          print( "TWITTER: Error: ".$response->status_line(), "\n" );
+          $kernel->post( $src, $replypath, "Either you denied Destult access, or some other error occured. Please try again.", $dest );
+          delete $heap->{ 'twitterUsers' }->{ uc( $who ) };
+          DumpFile( "twitterUsers.yaml", $heap->{ 'twitterUsers' } );
+          return;
+        }
+        my $oaResponse = Net::OAuth->response( 'access token' )->from_post_body( $response->content );
+        $heap->{ 'twitterUsers' }->{ uc( $who ) } = {
+          state => 1,
+          token => $oaResponse->token,
+          secret => $oaResponse->token_secret,
+        };
+        $kernel->post( $src, $replypath, "Congratulations! Destult now has a token to access your Twitter account. You shouldn't need to do this again.", $dest );
+        DumpFile( "twitterUsers.yaml", $heap->{ 'twitterUsers' } );
+        return;
+      }
+  
+      my $len = length $what;
+      if( $len > 140 ) {
+        $kernel->post( $src, $replypath, "Your tweet exceeds the 140-character limit by ".($len - 140)." character".($len>141?"s":""), $dest );
+        return;
+      }
+    
+      my $oaRequest = Net::OAuth->request( "protected resource" )->new(
+        consumer_key     => $Destult::config{ "TWITTER_C_K" },
+        consumer_secret  => $Destult::config{ "TWITTER_C_S" },
+        request_url      => 'https://api.twitter.com/1.1/statuses/update.json',
+        request_method   => 'POST',
+        signature_method => 'HMAC-SHA1',
+        timestamp        => time,
+        nonce            => $nonce,
+        token            => $heap->{ 'twitterUsers' }->{ uc( $who ) }->{ "token" },
+        token_secret     => $heap->{ 'twitterUsers' }->{ uc( $who ) }->{ "secret" },
+        extra_params => {
+          status => $what
+        }
+      );
+      $oaRequest->sign();
+      my $response = $userAgent->request( POST $oaRequest->to_url() );
+      if( !$response->is_success() ) {
+        print( "TWITTER: Error: ".$response->status_line(), "\n" );
+        print( "TWITTER: URL was '".$oaRequest->to_url()."'\n" );
+        if( $response->code == "401" ) {
+          $kernel->post( $src, $replypath, "401 from Twitter: This generally means Destult ".
+                                           "has been de-authorized to update your Twitter ".
+                                           "status. You might consider using ~DETWITTER and ".
+                                           "then re-authorizing through ~TWITTER.", $dest );
+        } else {
+          $kernel->post( $src, $replypath, "I ran into an error updating your Twitter status: ".$response->status_line, $dest );
+        }
+        return;
+      }
+      $kernel->post( $src, $replypath, "Tweet.", $dest );
+    } else {
+      my $oaRequest = Net::OAuth->request( "request token" )->new(
+        consumer_key     => $Destult::config{ "TWITTER_C_K" },
+        consumer_secret  => $Destult::config{ "TWITTER_C_S" },
+        request_url      => 'http://api.twitter.com/oauth/request_token',
+        request_method   => 'POST',
+        signature_method => 'HMAC-SHA1',
+        timestamp        => time,
+        nonce            => $nonce,
+        callback         => "oob",
+      );
+      
+      $oaRequest->sign();
+      
+      $kernel->post( $src, $replypath, "One moment, I am retrieving a request token..", $dest );
+      my $response = $userAgent->request( POST $oaRequest->to_url() );
+      
+      if( !($response->is_success()) ) {
+        $kernel->post( $src, $replypath, "An error occured while retrieving the request token from Twitter: ".$response->status_line() );
+        return;
+      }
+      
+      my $oaResponse = Net::OAuth->response( 'request token' )->from_post_body( $response->content );
+      $kernel->post( $src, $replypath, "You must grant Destult write access to your Twitter account. ".
+                                       "To do so, please visit: ".
+                                       "http://twitter.com/oauth/authorize?oauth_token=".($oaResponse->token)." ".
+                                       "and then re-run this command with the PIN given by Twitter as the argument.", $dest );
+      $heap->{ 'twitterUsers' }->{ uc( $who ) } = {
+      	request_token => $oaResponse->token,
+      	request_secret => $oaResponse->token_secret,
+      	state => 0
+      };
+      DumpFile( "twitterUsers.yaml", $heap->{ 'twitterUsers' } );
+    }
+  }
+
+DETWITTER: |-
+  sub {
+    my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
+
+    if( !exists( $heap->{ 'twitterUsers' } ) ) {
+      if( -e 'twitterUsers.yaml' ) {
+        $heap->{ 'twitterUsers' } = LoadFile( 'twitterUsers.yaml' );
+      } else {
+        $heap->{ 'twitterUsers' } = {};
+      }
+    }
+
+    if( exists( $heap->{ 'twitterUsers' }->{ uc( $who ) } ) ) {
+      delete $heap->{ 'twitterUsers' }->{ uc( $who ) };
+      DumpFile( "twitterUsers.yaml", $heap->{ 'twitterUsers' } );
+      $kernel->post( $src, $replypath, "I've discarded my access token for your account.", $dest );
+    } else {
+      $kernel->post( $src, $replypath, "I have no access token for your account.", $dest );
+    }
+  }
+
+IMDB: |-
+  sub {
+    my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
+    use IMDB::Film;
+    if( $what =~ /^\s*$/ ) {
+      $kernel->post( $src, $replypath, "Usage: IMDB <title or IMDB#>", $dest );
+      return;
+    }
+    my $imdb = new IMDB::Film( crit => $what, error => [] );
+    if( $imdb->status ) {
+      $kernel->post( $src, $replypath, $imdb->title()." (".$imdb->year()."): ".join( ', ', @{ $imdb->genres() } )."; Rating ".(scalar $imdb->rating()).": ".$imdb->storyline(), $dest );
+    } else {
+      $kernel->post( $src, $replypath, "An error occured: ".$imdb->error(), $dest );
+    }
+  }
+
+VERSION: |-
+  sub {
+    my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
+    $what =~ s/(^\s+)|(\s+$)//g;
+    my @args = split(/ /, $what);
+    if( (scalar @args) != 2 ) {
+      $kernel->post( $src, $replypath, "VERSION displays the current version of a Debian package.", $dest );
+      $kernel->post( $src, $replypath, "Usage: VERSION <release name> <package name>", $dest );
+      return;
+    }
+    use LWP::Simple;
+    my $page = get( "http://packages.debian.org/".join( '/', @args ) );
+    $page =~ m/<h1>(Package: .*?)<\/h1>/s;
+    $kernel->post( $src, $replypath, $1, $dest );
+  }
+
+BACKRONYM: |-
+  sub {
+    my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
+    my $FH;
+    my $dict;
+    unless( exists $heap->{ "backronym_dict" } ) {
+      $dict = $heap->{ "backronym_dict" } = {};
+      if( -e "backronym.wordlist" ) {
+        print( "BACKRONYM: Using backronym.wordlist\n" );
+        open $FH, "<", "backronym.wordlist";
+      } elsif( -e "/usr/share/dict/words" ) {
+        print( "BACKRONYM: Using /usr/share/dict/words\n" );
+        open $FH, "<", "/usr/share/dict/words";
+      } else {
+        $kernel-post( $src, $replypath, "I can't find a wordlist. :(", $dest );
+        return;
+      }
+      while(<$FH>) {
+        chomp;
+        my $word = $_;
+        $word =~ tr/A-Z/a-z/;
+        my $ch = (substr $word, 0, 1);
+        $dict->{ $ch } = [] unless exists $dict->{ $ch };
+        push @{ $dict->{ $ch } }, $word;
+      }
+      close $FH;
+    } else {
+      $dict = $heap->{ "backronym_dict" };
+    }
+    my $response = "";
+    $what =~ tr/A-Z/a-z/;
+    for my $c (split( //, $what)) {
+      $response .= $dict->{ $c }->[ int( rand( scalar @{$dict->{$c}} ) ) ]." ";
+    }
+    $kernel->post( $src, $replypath, $response, $dest );
+  }
+
+WALPHA: |-
+  sub {
+    use WWW::WolframAlpha;
+    my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
+    my $searchPod;
+    if( $what =~ '(.+)/([^/]+)$' ) {
+    	$what = $1;
+    	$searchPod = $2;
+    }
+    my $walpha = WWW::WolframAlpha->new( appid => 'PP2R8A-Q4UGY6EGGV' );
+    my $query = $walpha->query( input => $what );
+    if( $query->success ) {
+      my $pods = '';
+      for my $pod( @{$query->pods} ) {
+      	if( defined( $searchPod ) && $pod->title =~ /^$searchPod/i ) {
+          my $response = '';
+          for my $subpod( @{$pod->subpods} ) {
+            $response .= $subpod->title.': ' unless $subpod->title =~ /^\s*$/;
+            $response .= $subpod->plaintext.'; ';
+          }
+          $response =~ s/\n+/; /g;
+          $response =~ s/\((open|close) curly double quote\)/"/g;
+          $response =~ s/; $//;
+      	  $kernel->post( $src, $replypath, $pod->numsubpods.' results: '.$response, $dest );
+      	  return;
+      	}
+        $pods .= $pod->title.', ';
+      }
+      $pods =~ s/, $//;
+      if( defined( $searchPod ) ) {
+        $kernel->post( $src, $replypath, "No POD matching $searchPod found. Please choose from: $pods", $dest );
+      } else {
+        $kernel->post( $src, $replypath, "Please select a POD: $pods", $dest );
+      }
+    } elsif( $walpha->error ) {
+      $kernel->post( $src, $replypath, "Error: ".$walpha->errmsg, $dest );
+    } elsif( $query->error ) {
+      $kernel->post( $src, $replypath, "Error: ".$query->error->msg, $dest );
+    }
+  }
