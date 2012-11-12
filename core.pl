@@ -268,7 +268,7 @@ sub on_public {
 		# Handle Karma
 		if( $what =~ m/^([^ ]+)--$/ ) {
 			$kernel->yield( "cmd", $who, "KARMADOWN $1", $src, $dest, $replypath, $trusted );
-		} elsif( $what =~ m/^(?|\(([^)]+)\)\+\+$|([^ ]+)\+\+$)/ && $what !~ m/DC\+\+$/i ) {
+		} elsif( $what =~ m/^(?|\(([^)]+)\)\+\+|([^ ]+)\+\+)($| )/ && $what !~ m/DC\+\+$/i ) {
 			$kernel->yield( "cmd", $who, "KARMAUP $1", $src, $dest, $replypath, $trusted );
 		}
 	}
