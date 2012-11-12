@@ -38,7 +38,7 @@ sub new {
 	while( $_ = shift ) {
 		print( "IRC : Parsing Option '$_'\n" );
 		my( $name, $value ) = split( /=/, $_, 2 );
-		if( $name == "trap" ) {
+		if( $name eq "trap" ) {
 			if( $value == 1 ) {
 				$value = "";
 			}
