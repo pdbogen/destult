@@ -124,7 +124,7 @@ sub on_start {
 		print( "CORE: Connect to $host over $prot: $opts\n" );
 		if( $prot =~ /irc/i ) {
 			my @opts = split( '/', $opts );
-			push @{ $heap->{ 'servers' } }, irc::new( $host, shift @opts, @opts );
+			push @{ $heap->{ 'servers' } }, irc::new( $host, shift @opts, $Destult::config{ 'NICKNAME' }, @opts );
 		} else {
 			die( "CORE: Unknown protocol: '$prot'" );
 		}

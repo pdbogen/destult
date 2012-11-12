@@ -29,7 +29,7 @@ sub new {
 	my $self = {};
 	$self->{ "host" } = shift;
 	$self->{ "channel" } = shift;
-	$self->{ "nick" } = "Destult";
+	$self->{ "nick" } = shift;
 	$self->{ "port" } = 6667;
 	$self->{ "password" } = "";
 	$self->{ "trap" } = 0;
