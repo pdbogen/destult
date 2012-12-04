@@ -124,7 +124,7 @@ sub on_start {
 		print( "CORE: Connect to $host over $prot: $opts\n" );
 		if( $prot =~ /irc/i ) {
 			my @opts = split( '/', $opts );
-			push @{ $heap->{ 'servers' } }, irc::new( $host, shift @opts, @opts );
+			push @{ $heap->{ 'servers' } }, irc::new( $host, shift @opts, $Destult::config{ 'NICKNAME' }, @opts );
 		} else {
 			die( "CORE: Unknown protocol: '$prot'" );
 		}
@@ -266,9 +266,9 @@ sub on_public {
 			$kernel->yield( "cmd", $who, "TITLE $url", $src, $dest, $replypath, $trusted );
 		}
 		# Handle Karma
-		if( $what =~ m/^([^ ]+)--$/ ) {
+		if( $what =~ m/^(?|\(([^)]+)\)--|([^ ]+)--)($| )/ ) {
 			$kernel->yield( "cmd", $who, "KARMADOWN $1", $src, $dest, $replypath, $trusted );
-		} elsif( $what =~ m/^(?|\(([^)]+)\)\+\+$|([^ ]+)\+\+$)/ && $what !~ m/DC\+\+$/i ) {
+		} elsif( $what =~ m/^(?|\(([^)]+)\)\+\+|([^ ]+)\+\+)($| )/ && $what !~ m/DC\+\+$/i ) {
 			$kernel->yield( "cmd", $who, "KARMAUP $1", $src, $dest, $replypath, $trusted );
 		}
 	}

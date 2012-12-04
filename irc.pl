@@ -29,7 +29,7 @@ sub new {
 	my $self = {};
 	$self->{ "host" } = shift;
 	$self->{ "channel" } = shift;
-	$self->{ "nick" } = "Destult";
+	$self->{ "nick" } = shift;
 	$self->{ "port" } = 6667;
 	$self->{ "password" } = "";
 	$self->{ "trap" } = 0;
@@ -38,7 +38,7 @@ sub new {
 	while( $_ = shift ) {
 		print( "IRC : Parsing Option '$_'\n" );
 		my( $name, $value ) = split( /=/, $_, 2 );
-		if( $name == "trap" ) {
+		if( $name eq "trap" ) {
 			if( $value == 1 ) {
 				$value = "";
 			}
