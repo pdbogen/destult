@@ -1,5 +1,5 @@
 --- #YAML:1.0
-SERVERS: irc://irc.tamu.edu/#dc
+SERVERS: irc://irc.tamu.edu/#dc campfire://example.campfirenow.com/room=Room+1/trap/token=ffffffffffffffffffffffffffff4242424242424
 NICKNAME: Destult
 PASSWORD: Ic43
 TWITTER_C_K: Twitter Client Key

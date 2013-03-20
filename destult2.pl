@@ -1,7 +1,7 @@
 #!/usr/bin/perl
 
 =COPYLEFT
-	Copyright 2004, Patrick Bogen
+	Copyright 2004-2013, Patrick Bogen
 
 	This file is part of Destult.
 
@@ -27,6 +27,7 @@ use POE;
 our( %config );
 require "./config.pl";
 require "./irc.pl";
+require "./campfire.pl";
 require "./core.pl";
 
 $poe_kernel->run();

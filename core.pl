@@ -1,5 +1,5 @@
 =COPYLEFT
-	Copyright 2004-2006, Patrick Bogen
+	Copyright 2004-2013, Patrick Bogen
 
 	This file is part of Destult2.
 
@@ -122,9 +122,16 @@ sub on_start {
 		my( $prot, $rest ) = ( $1, $2 );
 		my( $host, $opts ) = split( '/', $rest, 2 );
 		print( "CORE: Connect to $host over $prot: $opts\n" );
+		my @opts = split( '/', $opts );
+		for( my $i = 0; $i < scalar @opts; $i++ ) {
+			$opts[$i] =~ s/%2B/+/g;
+			$opts[$i] =~ s/%20/ /g;
+			$opts[$i] =~ s/%25/%/g;
+		}
 		if( $prot =~ /irc/i ) {
-			my @opts = split( '/', $opts );
 			push @{ $heap->{ 'servers' } }, irc::new( $host, shift @opts, $Destult::config{ 'NICKNAME' }, @opts );
+		} if( $prot =~ /campfire/i ) {
+			push @{ $heap->{ 'servers' } }, campfire::new( $host, @opts );
 		} else {
 			die( "CORE: Unknown protocol: '$prot'" );
 		}
@@ -253,6 +260,7 @@ sub advertise {
 # this should check for hooks stored on the heap. TODO.
 sub on_public {
 	my( $kernel, $heap, $who, $what, $src, $dest, $replypath, $trusted, $trap ) = @_[ KERNEL, HEAP, ARG0, ARG1, ARG2, ARG3, ARG4, ARG5, ARG6 ];
+	print( "CORE : Response will go to $dest via $replypath\n" );
 	my $cmd = ( split( / /, $what, 2 ) )[0];
 	# Check for the presence of a command
 	if( $cmd =~ /^~.*/ ) {
