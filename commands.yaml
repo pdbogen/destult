@@ -1957,7 +1957,7 @@ TWITTER: |-
   
     if( exists( $heap->{ 'twitterUsers' }->{ uc( $who ) } ) ) {
       if( $heap->{ 'twitterUsers' }->{ uc( $who ) }->{ "state" } == 0 ) {
-        $nonce = md5_hex( time.rand );
+        $nonce = sha256_hex( time.rand );
         my $oaRequest = Net::OAuth->request( "access token" )->new(
           consumer_key     => $Destult::config{ "TWITTER_C_K" },
           consumer_secret  => $Destult::config{ "TWITTER_C_S" },
@@ -1996,7 +1996,7 @@ TWITTER: |-
         return;
       }
     
-      $nonce = md5_hex( time.rand );
+      $nonce = sha256_hex( time.rand );
       my $oaRequest = Net::OAuth->request( "protected resource" )->new(
         consumer_key     => $Destult::config{ "TWITTER_C_K" },
         consumer_secret  => $Destult::config{ "TWITTER_C_S" },
@@ -2028,7 +2028,7 @@ TWITTER: |-
       }
       $kernel->post( $src, $replypath, "Tweet.", $dest );
     } else {
-      $nonce = md5_hex( time.rand );
+      $nonce = sha256_hex( time.rand );
       my $oaRequest = Net::OAuth->request( "request token" )->new(
         consumer_key     => $Destult::config{ "TWITTER_C_K" },
         consumer_secret  => $Destult::config{ "TWITTER_C_S" },
