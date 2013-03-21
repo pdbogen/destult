@@ -425,7 +425,7 @@ PARSE: |-
       $response = $responses[ int( rand( scalar( @responses ) ) ) ].$author;
     } elsif( $response =~ /<alias>(.+)/ ) {
       $response =~ s/<alias>//;
-      $kernel->post( "core", "cmd", $who, "~+".$response, $src, $dest->{ 'dest' }, $replypath, $dest->{ 'trusted' } );
+      $kernel->post( "core", "cmd", $who, "~+".$response." $arg", $src, $dest->{ 'dest' }, $replypath, $dest->{ 'trusted' } );
       return;
     } else {
       my @responses = split( /\|/, $response );
