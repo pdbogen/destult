@@ -130,7 +130,7 @@ sub on_start {
 		}
 		if( $prot =~ /irc/i ) {
 			push @{ $heap->{ 'servers' } }, irc::new( $host, shift @opts, $Destult::config{ 'NICKNAME' }, @opts );
-		} if( $prot =~ /campfire/i ) {
+		} elsif( $prot =~ /campfire/i ) {
 			push @{ $heap->{ 'servers' } }, campfire::new( $host, @opts );
 		} else {
 			die( "CORE: Unknown protocol: '$prot'" );
