@@ -1938,6 +1938,7 @@ TWITTER: |-
     use Digest::SHA qw( sha256_hex );
     use HTTP::Request::Common;
     use LWP::UserAgent;
+    use JSON;
     
     my $userAgent = LWP::UserAgent->new();
     my $nonce;
@@ -1990,7 +1991,50 @@ TWITTER: |-
         return;
       }
   
+      my $shorten_length_http = -1;
+      my $shorten_length_https = -1;
+      if( !exists $heap->{ 'twitterConfigTime' } || $heap->{ 'twitterConfigTime' } < (time - 86400) ) {
+        print( "TWITTER : Configuration info is stale or nonexistent; retrieving.\n" );
+        $nonce = sha256_hex( time.rand );
+        my $oaRequest = Net::OAuth->request( "protected resource" )->new(
+          consumer_key     => $Destult::config{ "TWITTER_C_K" },
+          consumer_secret  => $Destult::config{ "TWITTER_C_S" },
+          request_url      => 'https://api.twitter.com/1.1/help/configuration.json',
+          request_method   => 'GET',
+          signature_method => 'HMAC-SHA1',
+          timestamp        => time,
+          nonce            => $nonce,
+          token            => $heap->{ 'twitterUsers' }->{ uc( $who ) }->{ "token" },
+          token_secret     => $heap->{ 'twitterUsers' }->{ uc( $who ) }->{ "secret" },
+        );
+        $oaRequest->sign();
+        my $response = $userAgent->request( GET $oaRequest->to_url() );
+        if( !$response->is_success() ) {
+          print( "TWITTER: Error: ".$response->status_line(), "\n" );
+          print( "TWITTER: URL was '".$oaRequest->to_url()."'\n" );
+          $kernel->post( $src, $replypath, "Failed to retrieve configuration information from twitter; cannot discern the shortened length of URLs. URLs will not be handled specially.", $dest );
+        } else {
+          my $response_data = decode_json $response->content();
+          $heap->{ 'twitterConfigTime' } = time;
+          $shorten_length_http = $heap->{ 'twitterConfigShortenLength' } = $response_data->{ "short_url_length" };
+          $shorten_length_https = $heap->{ 'twitterConfigShortenLengthHTTPS' } = $response_data->{ "short_url_length_https" };
+          print( "TWITTER : http:// URLs will be shortened to $shorten_length_http chars; https:// URLs will be shortened to $shorten_length_https chars\n" );
+        }
+      } else {
+        $shorten_length_http = $heap->{ 'twitterConfigShortenLength' };
+        $shorten_length_https = $heap->{ 'twitterConfigShortenLengthHTTPS' };
+        print( "TWITTER : http:// URLs will be shortened to $shorten_length_http chars; https:// URLs will be shortened to $shorten_length_https chars\n" );
+      }
+  
       my $len = length $what;
+      if( $shorten_length_http != -1 && $shorten_length_https != -1 ) {
+        my $url_munged_what = $what;
+        my $http_placeholder = "x"x$shorten_length_http;
+        my $https_placeholder = "x"x$shorten_length_https;
+        $url_munged_what =~ s/http:\/\/[^\s]+/$http_placeholder/g;
+        $url_munged_what =~ s/https:\/\/[^\s]+/$https_placeholder/g;
+        $len = length $url_munged_what;
+      }
       if( $len > 140 ) {
         $kernel->post( $src, $replypath, "Your tweet exceeds the 140-character limit by ".($len - 140)." character".($len>141?"s":""), $dest );
         return;
