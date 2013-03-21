@@ -858,31 +858,6 @@ QDB: |-
     }
   }
 
-TRANSLATE: |-
-  sub {
-    use REST::Google::Translate;
-    REST::Google::Translate->http_referer( "http://cernu.us" );
-    my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
-    if( $what eq "" ) {
-      $kernel->post( $src, $replypath, "Usage: translate <source lang> <dest lang> <message> -- I have no idea what languages I know, so just try two-letter codes.", $dest );
-      return;
-    }
-    my @words = split( / /, $what );
-    my $from = shift @words;
-    my $to = shift @words;
-    my $result = REST::Google::Translate->new(
-      q => join( ' ', @words ),
-      langpair => "$from|$to"
-    );
-    if( $result->responseStatus != 200 ) {
-      $kernel->post( $src, $replypath, "Translation failed. Invalid arguments? Bad language? No clue.", $dest );
-      return;
-    }
-    my $trtx = $result->responseData->translatedText;
-    $trtx =~ s/&#39;/'/gi;
-    $kernel->post( $src, $replypath, $trtx, $dest );
-  }
-
 RSS: |-
   sub {
     use WWW::Shorten::TinyURL;
