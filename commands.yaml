@@ -891,9 +891,16 @@ RSS: |-
   
     my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
     my @args = split( / /, $what );
+    my( @params, @fields );
     if( $#args < 1 || !( $args[1] =~ /^([0-9]+-)?[0-9]+$/ ) ) {
-      $kernel->post( $src, $replypath, "Usage: RSS <source URL> <first>-<last> [<field1> ... <fieldN>]", $dest );
-      $kernel->post( $src, $replypath, "Standard fields are usually 'title,' 'link,' 'description.' Prepend a field with '+' to compress whitespace. Prepend a field with '!' to strip out HTML (and convert, where possible.) Prepend a field with '\@' to have that field start on its own line in the response. Any combination of these three flags is acceptable.", $dest );
+      $kernel->post( $src, $replypath, "Usage: RSS <source URL> <first>-<last> [<field1> ... <fieldN>] [: <arg1> ... <argN>]", $dest );
+  
+      $kernel->post(
+        $src,
+        $replypath,
+        "Standard fields are usually 'title,' 'link,' 'description.' Prepend a field with '+' to compress whitespace. Prepend a field with '!' to strip out HTML (and convert, where possible.) Prepend a field with '\@' to have that field start on its own line in the response. Any combination of these three flags is acceptable. You can add arguments to an RSS feed by using '\${argN}' in the URL, where \${arg1} is the first argument following a bare ':'.",
+        $dest
+      );
       return;
     }
     my $url = shift @args;
@@ -911,8 +918,29 @@ RSS: |-
     	$last = $2;
     }
     print( "RSS: $first to $last\n" );
-    if( $#args == -1 ) {
-    	@args = ( 'superdate', 'supertitle', 'title', 'link' );
+    my $state = 0;
+    for( my $i = 0; $i < scalar @args; $i++ ) {
+      if( $state == 0 ) {
+        if( $args[$i] eq ':' ) {
+          $state = 1;
+        } else {
+          print( "RSS: Field found: $args[$i]\n" );
+          push @fields, $args[$i];
+        }
+      } else {
+        print( "RSS: Argument found: $args[$i]\n" );
+        push @params, $args[$i];
+      }
+    }
+    
+    for( my $i = 0; $i < scalar @params; $i++ ) {
+      my $n = $i + 1;
+      print( "RSS: Replacing \${arg$n} with $params[$i]\n" );
+      $url =~ s/\$\{arg$n\}/$params[$i]/g;
+    }
+    
+    if( $#fields == -1 ) {
+    	@fields = ( 'superdate', 'supertitle', 'title', 'link' );
     }
     
     my $xml;
@@ -937,7 +965,7 @@ RSS: |-
     my $response = "";
     my @items;
     my @nargs;
-    for my $arg( @args ) {
+    for my $arg( @fields ) {
       if( $arg eq "superdate" ) {
         push @items, strftime( "%a %b %e %H:%M:%S %Y", localtime );
       } elsif( $arg =~ /^super/ ) {
@@ -959,7 +987,7 @@ RSS: |-
       if( $n > $last ) {
         last;
       }
-
+  
       my @bits;
       for my $arg( @args ) {
         my $strip = 0;
