@@ -1935,12 +1935,12 @@ TWITTER: |-
   
     use Net::OAuth;
     $Net::OAuth::PROTOCOL_VERSION = Net::OAuth::PROTOCOL_VERSION_1_0A;
-    use Digest::MD5 qw( md5_hex );
+    use Digest::SHA qw( sha256_hex );
     use HTTP::Request::Common;
     use LWP::UserAgent;
     
     my $userAgent = LWP::UserAgent->new();
-    my $nonce = md5_hex( time.rand );
+    my $nonce;
     
     if( !exists( $heap->{ 'twitterUsers' } ) ) {
       if( -e 'twitterUsers.yaml' ) {
@@ -1957,6 +1957,7 @@ TWITTER: |-
   
     if( exists( $heap->{ 'twitterUsers' }->{ uc( $who ) } ) ) {
       if( $heap->{ 'twitterUsers' }->{ uc( $who ) }->{ "state" } == 0 ) {
+        $nonce = md5_hex( time.rand );
         my $oaRequest = Net::OAuth->request( "access token" )->new(
           consumer_key     => $Destult::config{ "TWITTER_C_K" },
           consumer_secret  => $Destult::config{ "TWITTER_C_S" },
@@ -1995,6 +1996,7 @@ TWITTER: |-
         return;
       }
     
+      $nonce = md5_hex( time.rand );
       my $oaRequest = Net::OAuth->request( "protected resource" )->new(
         consumer_key     => $Destult::config{ "TWITTER_C_K" },
         consumer_secret  => $Destult::config{ "TWITTER_C_S" },
@@ -2026,6 +2028,7 @@ TWITTER: |-
       }
       $kernel->post( $src, $replypath, "Tweet.", $dest );
     } else {
+      $nonce = md5_hex( time.rand );
       my $oaRequest = Net::OAuth->request( "request token" )->new(
         consumer_key     => $Destult::config{ "TWITTER_C_K" },
         consumer_secret  => $Destult::config{ "TWITTER_C_S" },
