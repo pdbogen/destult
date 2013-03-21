@@ -143,49 +143,6 @@ LISTCOMMANDS: |-
     $kernel->post( $src, $replypath, $reply, $dest );
   }
 
-SCTITLE: |-
-  sub {
-    my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
-    if( !exists $Destult::config{ 'SC_SERVER' } ) {
-    	$kernel->post( $src, $replypath, "No shoutcast server configured.", $dest );
-    	return 0;
-    }
-    $Destult::config{ 'SC_PORT' } = 8000 unless exists $Destult::config{ 'SC_PORT' };
-
-    use Netx::WebRadio::Station::Shoutcast;
-    
-    my $station = Netx::WebRadio::Station::Shoutcast->new();
-    if( $station->connect(
-          $Destult::config{ 'SC_SERVER' },
-          $Destult::config{ 'SC_PORT' }
-        )
-      ) {
-      $station->title( " " );
-      my $i = 0;
-      while( $station->title() eq " " ) {
-        if( $i++ > 10000 ) {
-          $kernel->post( $src, $replypath, "Couldn't get title. Try again?", $dest );
-          return;
-        }
-        if( !$station->receive() ) {
-          $kernel->post( $src, $replypath, "Problem getting data from server.", $dest );
-          return;
-        }
-      }
-      $kernel->post( $src, $replypath, $station->title(), $dest );
-    } else {
-  #    my $http = new HTTP::Lite;
-  #    my $req = $http->request(
-  #      "http://".$Destult::config{ 'SC_SERVER' }.
-  #      ":".$Destult::config{ 'SC_PORT' }."/index.html"
-  #    ) or {
-  #      $kernel->post( $src, $replypath, "Direct connect to stream failed and HTML grab failed.", $dest );
-  #      return 0;
-  #    }
-      $kernel->post( $src, $replypath, "Direct connect to stream failed.", $dest );
-    }
-  }
-
 RELOADCOMMANDS: |-
   sub {
     my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
