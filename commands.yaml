@@ -2203,7 +2203,7 @@ WALPHA: |-
     use WWW::WolframAlpha;
     my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
     my $searchPod;
-    if( $what =~ '(.+)/([^/]+)$' ) {
+    if( $what =~ '(.+)/ *([^/]+)$' ) {
     	$what = $1;
     	$searchPod = $2;
     }
