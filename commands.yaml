@@ -508,7 +508,7 @@ DICT: |-
       $num += 1;
       my $page = get( 'http://www.urbandictionary.com/iphone/search/define?term='.$what );
       my $response = decode_json $page;
-      if( $num > $response->{ "total" } ) {
+      if( $num > scalar @{ $response->{ "list" } } ) {
         if( $num == 1 ) {
           $kernel->post( $src, $replypath, "There is no definition for '".$what."'", $dest );
         } else {
