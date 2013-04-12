@@ -2211,8 +2211,8 @@ WALPHA: |-
     my $query = $walpha->query( input => $what );
     if( $query->success ) {
       my $pods = '';
-      for my $pod( @{$query->pods} ) {
-      	if( defined( $searchPod ) && $pod->title =~ /^$searchPod/i ) {
+      for my $pod( sort { $b->title cmp $a->title } @{$query->pods} ) {
+      	if( defined( $searchPod ) && $pod->title =~ /^$searchPod/i || !defined( $searchPod ) && ( $pod->title =~ /^Result/i || $pod->title =~ /^Decimal Approximation/i ) ) {
           my $response = '';
           for my $subpod( @{$pod->subpods} ) {
             $response .= $subpod->title.': ' unless $subpod->title =~ /^\s*$/;
