@@ -1249,14 +1249,14 @@ FANDANGO: |-
   }
 WEBTENDER: |-
   sub {
-    use YAML qw(LoadFile DumpFile);
+    use Storable;
     use LWP::UserAgent;
 
     my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
     
     if( !exists( $heap->{ 'WEBTENDER_cache' } ) ) {
-      if( -f 'webtenderCache.yaml' ) {
-        $heap->{ 'WEBTENDER_cache' } = LoadFile( "webtenderCache.yaml" );
+      if( -f 'webtenderCache.storable' ) {
+        $heap->{ 'WEBTENDER_cache' } = retrieve( 'webtenderCache.storable' );
       } else {
         $heap->{ 'WEBTENDER_cache' } = {};
       }
@@ -1318,7 +1318,7 @@ WEBTENDER: |-
         }
       }
       $heap->{ 'WEBTENDER_cache' }->{ uc( $what ) } = $result;
-      DumpFile( "webtenderCache.yaml", $heap->{ 'WEBTENDER_cache' } );
+      store $heap->{ 'WEBTENDER_cache' }, 'webtenderCache.storable';
     }
   
     my $result = $heap->{ 'WEBTENDER_cache' }->{ uc( $what ) };
@@ -1724,6 +1724,101 @@ GETLINE: |-
       return;
     }
     $kernel->post( $src, $replypath, substr( $text, 0, 354 ), $dest );
+  }
+
+KARMAHAT: |-
+  sub {
+    my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
+    if( !exists( $heap->{ "karma" } ) ) {
+      if( -e "karma.yaml" ) {
+        $heap->{ "karma" } = LoadFile( "karma.yaml" );
+      } else {
+        $heap->{ "karma" } = {};
+      }
+    }
+    if( !exists( $heap->{ "karmahats" } ) ) {
+      if( -e "karmahats.yaml" ) {
+        $heap->{ "karmahats" } = LoadFile( "karmahats.yaml" );
+      } else {
+        $heap->{ "karmahats" } = { hats => {}, user_hats => {} };
+      }
+    }
+    my $hats = $heap->{ "karmahats" }->{ "hats" };
+    my $hatsref;
+    if( exists( $heap->{ "karmahats" }->{ "user_hats" }->{ uc( $who ) } ) ) {
+      $hatsref = $heap->{ "karmahats" }->{ "user_hats" }->{ uc( $who ) };
+    } else {
+      $hatsref = $heap->{ "karmahats" }->{ "user_hats" }->{ uc( $who ) } = {};
+    }
+    if( $what =~ /^$/ ) {
+      $kernel->post( $src, $replypath, "Your hats: ".join( ", ", map( $hats->{ $_ }->{ "name" }, keys %$hatsref ) ), $dest );
+      return;
+    }
+    my( $cmd, $arg ) = split( / /, $what, 2 );
+    if( $cmd =~ /^CREATE$/i ) {
+      my( $cost, $name ) = split( / /, $arg, 2 );
+      if( $cost !~ /^[0-9]+$/ ) {
+        $kernel->post( $src, $replypath, "The cost of a hat must be an integer number of karma dots.", $dest );
+        return;
+      }
+      if( exists( $hats->{ uc( $name ) } ) ) {
+        $kernel->post( $src, $replypath, "A hat already exists with that name.", $dest );
+        return;
+      }
+      $hats->{ uc( $name ) } = { name => $name, cost => $cost, creator => uc( $who ) };
+      $kernel->post( $src, $replypath, "Hat created! You can buy one now!", $dest );
+    } elsif( $cmd =~ /^LIST$/i ) {
+      if( length $arg > 0 ) {
+        $hatsref = $heap->{ "karmahats" }->{ "user_hats" }->{ uc( $arg ) };
+        $kernel->post( $src, $replypath, $arg."'s hats: ".join( ", ", map( $hats->{ $_ }->{ "name" }, keys %$hatsref ) ), $dest );
+      } else {
+        $kernel->post( $src, $replypath, "The following hats are known to me: ".join( ", ", map( $hats->{ $_ }->{ "name" }, keys %$hats ) ), $dest );
+      }
+      return;
+    } elsif( $cmd =~ /^BUY$/i ) {
+      if( !exists( $hats->{ uc( $arg ) } ) ) {
+        $kernel->post( $src, $replypath, "No hat exists with the name '$arg'.", $dest );
+        return;
+      }
+      if( exists( $hatsref->{ uc( $arg ) } ) ) {
+        $kernel->post( $src, $replypath, "You already have that hat. You can KARMAHAT GIVE it away, if you want.", $dest );
+        return;
+      }
+      my $hat = $hats->{ uc( $arg ) };
+      if( $heap->{ "karma" }->{ uc( $who ) } < $hat->{ "cost" } ) {
+        $kernel->post( $src, $replypath, "You cannot afford that hat. Sad day! Maybe create a cool hat and get a cut of the profit.", $dest );
+        return;
+      }
+      $kernel->post( $src, $replypath, "Hat bought! Some of your money goes to ".$hat->{ "creator" }.", though. Hope that's OK.", $dest );
+      $heap->{ "karma" }->{ uc( $who ) } -= $hat->{ "cost" };
+      $heap->{ "karma" }->{ uc( $hat->{ "creator" } ) } += $hat->{ "cost" } * 0.10;
+      $hatsref->{ uc( $arg ) } = 1;
+    } elsif( $cmd =~ /^GIVE$/i ) {
+      my( $recip, $hat ) = split( / /, $arg, 2 );
+      if( !exists( $hats->{ uc( $hat ) } ) ) {
+        $kernel->post( $src, $replypath, "No hat exists with the name '$hat'.", $dest );
+        return;
+      }
+      if( !exists( $hatsref->{ uc( $hat ) } ) ) {
+        $kernel->post( $src, $replypath, "You do not have that hat. You can KARMAHAT BUY it, if you want.", $dest );
+        return;
+      }
+      my $targhatsref = $heap->{ "karmahats" }->{ "user_hats" }->{ $recip };
+      if( exists( $targhatsref->{ uc( $hat ) } ) ) {
+        $kernel->post( $src, $replypath, "$recip has that hat, chump.", $dest );
+        return;
+      }
+      $kernel->post( $src, $replypath, "You no longer have that hat, and $recip now does. Giving!", $dest );
+      $targhatsref->{ uc( $hat ) } = 1;
+      delete $hatsref->{ uc( $hat ) };
+    } elsif( $cmd =~ /^HELP$/i ) {
+      $kernel->post( $src, $replypath, "Do 'KARMAHAT <command> <arguments>' with the following commands: GIVE <person> <hat>; BUY <hat>; CREATE <cost> <hat>; LIST [<who>]", $dest );
+      return;
+    } else {
+      $kernel->post( $src, $replypath, "I don't know how to do $cmd with hats. Try 'KARMAHAT HELP'?", $dest );
+      return;
+    }
+    DumpFile( "karmahats.yaml", $heap->{ 'karmahats' } );
   }
 
 KARMADOWN: |-
