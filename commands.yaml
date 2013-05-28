@@ -1007,6 +1007,7 @@ RSS: |-
               $tmp =~ s/<br ?\/?>/\n/g;
               $tmp =~ s/<[^>]+>//g;
             }
+            $tmp =~ s/\t/    /gi;
             $tmp =~ s/&nbsp;/ /gi;
             $tmp =~ s/&lt;/</gi;
             $tmp =~ s/&gt;/>/gi;
@@ -1022,6 +1023,7 @@ RSS: |-
               $tmp =~ s/[|]$//;
               $tmp =~ s/[|][[:space:]]+/|/g;
               $tmp =~ s/[|]+/|/g;
+              $tmp =~ s/\s+/ /g;
             }
             if( $ownline == 1 ) {
               $tmp = "\n".$tmp;
