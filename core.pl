@@ -268,7 +268,7 @@ sub on_public {
 	} else {
 		# Handle URLs
 		# TODO: Find a new place to put trap config
-		if( $trap && $what =~ m!(https?://[^[:space:]]+)!i ) {
+		if( $trap && $what =~ m!(https?://[^[:space:]]*[^[:space:].,\!'"])!i ) {
 			print( "IRC : URL Trapped: '$1' from $who\n" );
 			my $url = $1;
 			$kernel->yield( "cmd", $who, "TITLE $url", $src, $dest, $replypath, $trusted );
