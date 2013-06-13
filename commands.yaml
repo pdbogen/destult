@@ -997,7 +997,9 @@ RSS: |-
         if( exists( $item->{ $elem } ) ) {
           if( $elem eq "link" ) {
             if( $shorten ) {
-              push @bits, "<".makeashorterlink( $item->{ 'link' } ).">";
+              eval { $link = makeashorterlink( $item->{ 'link' } ); }; warn $@ if $@;
+              $link = $item->{ 'link' } unless $link;
+              push @bits, "<$link>";
             } else {
               push @bits, "<".$item->{ 'link' }.">";
             }
@@ -1697,7 +1699,8 @@ SHORTEN: |-
       my @arr = @{ $heap->{ 'urls' }->{ uc( $url ) } };
       $kernel->post( $src, $replypath, $arr[2]." [first: ".$arr[0]."/".$arr[1]."]", $dest );
     } else {
-      my $url = makeashorterlink( $url );
+      my $url;
+      eval { $url = makeashorterlink( $url ); }; warn $@ if $@;
       if( defined $url ) {
         $heap->{ 'urls' }->{ uc( $url ) } = [ $who, $dest->{ 'dest' }, $url ];
         $kernel->post( $src, $replypath, "$url [$who]", $dest );
@@ -1990,7 +1993,7 @@ TITLE: |-
       $short = $what;
     } else {
       use WWW::Shorten::TinyURL;
-      $short = makeashorterlink( $what );
+      eval { $short = makeashorterlink( $what ); }; warn $@ if $@;
       if( !$short ) {
         $short = $what;
       }
