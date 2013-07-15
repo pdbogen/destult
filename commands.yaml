@@ -997,6 +997,7 @@ RSS: |-
         if( exists( $item->{ $elem } ) ) {
           if( $elem eq "link" ) {
             if( $shorten ) {
+              my $link;
               eval { $link = makeashorterlink( $item->{ 'link' } ); }; warn $@ if $@;
               $link = $item->{ 'link' } unless $link;
               push @bits, "<$link>";
