@@ -229,7 +229,7 @@ sub send_public_to {
 	use Data::Dumper;
 	my $self = $heap->{ "self" };
 	my $no_throttle = $target->{ "no_throttle" };
-	if( $target->{ "dest" } =~ /^[#&][a-zA-Z0-9-_]+$/ ) {
+	if( $target->{ "dest" } =~ /^[#&+][\x01-\x06\x08\x09\x0B\x0C\x0E-\x1F\x21-\x2B\x2D-\x39\x3B-\xFF]+$/ ) {
 		if( $no_throttle || !$self->{ "throttle" } || length $msg <= 354 ) {
 			print( "IRC : =>".$target->{ "dest" }.": $msg\n" );
 			local( $Text::Wrap::columns = 354 );
