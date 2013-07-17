@@ -45,6 +45,20 @@ LINK: |-
     }
   }
 
+BOT: |-
+  sub {
+    my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
+    $heap->{ "bots" } = {} unless exists $heap->{ "bots" };
+    if( exists( $heap->{ "bots" }->{ uc($what) } ) ) {
+      delete $heap->{ "bots" }->{ uc($what) };
+      $kernel->post( $src, $replypath, "$what will no longer be treated as a bridge bot.", $dest );
+    } else {
+      $heap->{ "bots" }->{ uc($what) } = 1;
+      $kernel->post( $src, $replypath, "$what will now be treated as a bridge bot.", $dest );
+    }
+    DumpFile( "bots.yaml", $heap->{ "bots" } );
+  }
+
 ACCESS: |-
   sub {
     my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
@@ -997,6 +1011,7 @@ RSS: |-
         if( exists( $item->{ $elem } ) ) {
           if( $elem eq "link" ) {
             if( $shorten ) {
+              my $link;
               eval { $link = makeashorterlink( $item->{ 'link' } ); }; warn $@ if $@;
               $link = $item->{ 'link' } unless $link;
               push @bits, "<$link>";

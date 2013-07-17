@@ -68,6 +68,13 @@ sub on_start {
 		print( "CORE: No commands found.\n" );
 	}
 
+	if( -e "bots.yaml" ) {
+		$heap->{ "bots" } = \%{ LoadFile( "bots.yaml" ) };
+		print( "CORE: Bridge bots loaded.\n" );
+	} else {
+		print( "CORE: No bridge bots found.\n" );
+	}
+
 	if( -e "memos.yaml" ) {
 		$heap->{ 'memo' } = \%{ LoadFile( "memos.yaml" ) };
 		print( "CORE: Memos loaded.\n" );

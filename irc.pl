@@ -186,12 +186,11 @@ sub on_public {
 	my $nick = $self->{ "nick" };
 	$who = (split( /!/, $who, 2 ))[0];
 	$msg =~ s/^$nick[ ,:]+/~/i;
-
-	# Check for a new name for Amygdale.
-	# Thanks, kyle.
-	if( $who eq "a" || $who eq "ae" || $who eq "Amygdale" || $who eq "m" ) {
+	
+	$_[HEAP]->{ "bots" } = {} unless exists $_[HEAP]->{ "bots" };
+	if( exists( $_[HEAP]->{ "bots" }->{ uc($who) } ) ) {
 		$bridged = 1;
-		# Strip source tag
+		# Strip source tag, if set
 		$msg =~ s/^\[[^\]]*\] +//g;
 
 		# Reassign and strip sender
@@ -229,7 +228,7 @@ sub send_public_to {
 	use Data::Dumper;
 	my $self = $heap->{ "self" };
 	my $no_throttle = $target->{ "no_throttle" };
-	if( $target->{ "dest" } =~ /^[#&][a-zA-Z0-9-_]+$/ ) {
+	if( $target->{ "dest" } =~ /^[#&+][\x01-\x06\x08\x09\x0B\x0C\x0E-\x1F\x21-\x2B\x2D-\x39\x3B-\xFF]+$/ ) {
 		if( $no_throttle || !$self->{ "throttle" } || length $msg <= 354 ) {
 			print( "IRC : =>".$target->{ "dest" }.": $msg\n" );
 			local( $Text::Wrap::columns = 354 );
