@@ -36,8 +36,9 @@ if( -e "config.yaml" ) {
 		$Destult::config{ uc( $_ ) } = $Destult::config{ $_ };
 		delete $Destult::config{ $_ } if $_ ne uc( $_ );
 	}
-	DumpFile( "config.yaml", \%Destult::config );
 } else {
 	DumpFile( "config.yaml", \%Destult::config );
 	die( "No config file. Default written. These values are probably wrong." );
 }
+
+return 1;
