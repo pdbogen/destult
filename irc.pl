@@ -188,7 +188,8 @@ sub on_public {
 	$msg =~ s/^$nick[ ,:]+/~/i;
 	
 	$_[HEAP]->{ "bots" } = {} unless exists $_[HEAP]->{ "bots" };
-	if( exists( $_[HEAP]->{ "bots" }->{ uc($who) } ) ) {
+	if( exists( $Destult::config{ "bots" }->{ uc($who) } ) ) {
+		print( "CORE: Message bridged by $who\n" );
 		$bridged = 1;
 		# Strip source tag, if set
 		$msg =~ s/^\[[^\]]*\] +//g;

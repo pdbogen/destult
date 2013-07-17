@@ -48,15 +48,15 @@ LINK: |-
 BOT: |-
   sub {
     my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
-    $heap->{ "bots" } = {} unless exists $heap->{ "bots" };
-    if( exists( $heap->{ "bots" }->{ uc($what) } ) ) {
-      delete $heap->{ "bots" }->{ uc($what) };
+    $Destult::config{ "bots" } = {} unless exists $Destult::config{ "bots" };
+    if( exists( $Destult::config{ "bots" }->{ uc($what) } ) ) {
+      delete $Destult::config{ "bots" }->{ uc($what) };
       $kernel->post( $src, $replypath, "$what will no longer be treated as a bridge bot.", $dest );
     } else {
-      $heap->{ "bots" }->{ uc($what) } = 1;
+      $Destult::config{ "bots" }->{ uc($what) } = 1;
       $kernel->post( $src, $replypath, "$what will now be treated as a bridge bot.", $dest );
     }
-    DumpFile( "bots.yaml", $heap->{ "bots" } );
+    DumpFile( "bots.yaml", $Destult::config{ "bots" } );
   }
 
 ACCESS: |-

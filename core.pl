@@ -69,7 +69,7 @@ sub on_start {
 	}
 
 	if( -e "bots.yaml" ) {
-		$heap->{ "bots" } = \%{ LoadFile( "bots.yaml" ) };
+		$Destult::config{ "bots" } = \%{ LoadFile( "bots.yaml" ) };
 		print( "CORE: Bridge bots loaded.\n" );
 	} else {
 		print( "CORE: No bridge bots found.\n" );
