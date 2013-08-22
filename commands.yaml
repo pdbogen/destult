@@ -1998,7 +1998,7 @@ TITLE: |-
   sub {
     use POE::Component::IRC::Common qw( :ALL );
     my( $kernel, $heap, $who, $what, $src, $dest, $replypath ) = @_;
-    if( $what !~ /^https?:\/\/.+$/ ) {
+    if( $what !~ /^https?:\/\/.+$/i ) {
       $kernel->post( $src, $replypath, "Usage: TITLE <URL>", $dest );
       return;
     }
