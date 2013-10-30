@@ -122,12 +122,16 @@ sub watchdog {
 			Server		=> $self->{ "host" },
 			Port		=> $self->{ "port" },
 		} );
+	} else{
+		$heap{ "watchdog" } = 1;
 	}
 	$heap->{ 'timer' } = 0 unless defined $heap->{ 'timer' };
 	$heap->{ 'timer' }++;
 	# Back-up wathdog timer, in case IRC thinks it's connected but it isn't.
 	if( $heap->{ 'timer' } == 60 ) {
 		$kernel->post( $heap->{ 'ircobject' }->session_id(), "version" );
+		$heap->{ 'timer' } = 0;
+		print( "IRC : ".$self->{ "host" }.": VERSION ping\n" );
 	}
 	$kernel->delay_set( "watchdog", $heap->{ "watchdog" } );
 }
