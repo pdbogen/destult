@@ -83,7 +83,11 @@ sub do_join {
 	my( $kernel, $heap, $what ) = @_[ KERNEL, HEAP, ARG0 ];
 	if( $what =~ /^[#&][^ ,]+$/ ) {
 		print( "IRC : Joining '$what'\n" );
-		$kernel->post( $heap->{ 'ircobject' }->session_id(), "join", $what, @_[ ARG1..$#_ ] );
+		if( $_[ARG1] ) {
+			$kernel->post( $heap->{ 'ircobject' }->session_id(), "join", $what, $_[ARG1] );
+		} else {
+			$kernel->post( $heap->{ 'ircobject' }->session_id(), "join", $what );
+		}
 	} else {
 		warn( "'$what' is an invalid channel name" );
 	}
