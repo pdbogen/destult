@@ -209,6 +209,7 @@ sub on_public {
 	# Strip color
 	$msg =~ s/(\x3)[0-9]{0,2}//g;
 	$msg =~ s/\x02//g;
+	utf8::decode( $msg ); # intentionally continue if not valid UTF-8; it will be treated as the native encoding
 	$cmd = ( split( / /, $msg, 2 ) )[0];
 	$kernel->post( "core", "core_public", $who, $msg, $self->{ "ssid" }, $dest->[0], "send_public_to", ($bridged==0), $self->{ "trapEnabled" } );
 }
@@ -219,6 +220,7 @@ sub on_private {
 	$who = (split( /!/, $who, 2 ))[0];
 	$msg =~ s/(\x3)[0-9]{0,2}//g;
 	$msg =~ s/\x02//g;
+	utf8::decode( $msg ); # intentionally continue if not valid UTF-8; it will be treated as the native encoding
 	$cmd = ( split( / /, $msg, 2 ) )[0];
 	$kernel->post( "core", "cmd", $who, $msg, $self->{ "ssid" }, $who, "send_private", 1 );
 	$kernel->post( "core", "seen", $who, $msg, $self->{ "ssid" }, $who, "send_private", 1 );
